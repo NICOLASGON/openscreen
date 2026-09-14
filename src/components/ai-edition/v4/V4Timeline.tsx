@@ -9,7 +9,6 @@ import {
 	Music,
 	Pencil,
 	Scissors,
-	Slice,
 	Sparkles,
 	SplitSquareHorizontal,
 	Trash2,
@@ -1834,6 +1833,29 @@ export function V4Timeline({
 								</PopoverContent>
 							</Popover>
 							<span className={styles.tlToolSep} aria-hidden />
+							{/* Immediately before the trim tool. The two are the row's only cuts and the
+							    pair reads as one idea: this one divides a clip in two, the next marks a
+							    span of one for removal. Everything after them adds something instead. */}
+							<Tooltip content={t("toolbar.splitClip")}>
+								<button
+									type="button"
+									className={styles.tlToolBtn}
+									aria-label={t("toolbar.splitClip")}
+									onClick={() => {
+										// Not disabled when there is nothing to cut: knowing that needs
+										// the live playhead, and this component deliberately does not
+										// subscribe to it (see the playhead's own comment — it reads the
+										// store itself so playback does not re-render the timeline 60
+										// times a second). So it always fires, and says when it did not
+										// cut rather than looking broken.
+										void tl.splitClipAtPlayhead().then((didCut) => {
+											if (!didCut) toast.info(t("toolbar.splitClipNothingToCut"));
+										});
+									}}
+								>
+									<Scissors size={15} />
+								</button>
+							</Tooltip>
 							{tools.map((tool) => (
 								<Fragment key={tool.id}>
 									<Tooltip content={tool.label}>
@@ -1926,30 +1948,6 @@ export function V4Timeline({
 									) : null}
 								</Fragment>
 							))}
-							{/* Slice, not Scissors: this file already spends Scissors on a trim
-							    pill and SplitSquareHorizontal on the trim tool, and a cut that
-							    divides a clip in two is not the cut that marks a span for
-							    removal. One glyph, one operation. */}
-							<Tooltip content={t("toolbar.splitClip")}>
-								<button
-									type="button"
-									className={styles.tlToolBtn}
-									aria-label={t("toolbar.splitClip")}
-									onClick={() => {
-										// Not disabled when there is nothing to cut: knowing that needs
-										// the live playhead, and this component deliberately does not
-										// subscribe to it (see the playhead's own comment — it reads the
-										// store itself so playback does not re-render the timeline 60
-										// times a second). So it always fires, and says when it did not
-										// cut rather than looking broken.
-										void tl.splitClipAtPlayhead().then((didCut) => {
-											if (!didCut) toast.info(t("toolbar.splitClipNothingToCut"));
-										});
-									}}
-								>
-									<Slice size={15} />
-								</button>
-							</Tooltip>
 							<Tooltip content={t("buttons.addZoom")}>
 								<button
 									type="button"
