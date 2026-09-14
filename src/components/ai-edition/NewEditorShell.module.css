@@ -893,7 +893,7 @@
 	padding: 6px;
 	border: 1px solid var(--border);
 	border-radius: 12px;
-	background: var(--surface-1);
+	background: var(--bg);
 	box-shadow: var(--elev-pop);
 	/* Ten shapes must cost no more room than two. */
 	max-height: min(var(--radix-popover-content-available-height, 60vh), 320px);
@@ -1060,7 +1060,7 @@
 	padding-top: 4px;
 	border: 1px solid var(--border);
 	border-radius: 12px;
-	background: var(--surface-1);
+	background: var(--bg);
 	box-shadow: var(--elev-pop);
 	/* Radix measures the room actually left below the trigger and publishes it here, so the
 	   picker uses the screen it has instead of a number guessed at authoring time. The second
@@ -1080,7 +1080,7 @@
 	flex-direction: column;
 	border: 1px solid var(--border);
 	border-radius: 14px;
-	background: var(--surface-1);
+	background: var(--bg);
 	box-shadow: var(--elev-pop);
 	backdrop-filter: blur(18px);
 	-webkit-backdrop-filter: blur(18px);
@@ -1599,7 +1599,7 @@
 	top: -20px;
 	height: 18px;
 	padding: 0 8px;
-	background: var(--surface);
+	background: var(--bg);
 	border: 1px solid var(--border-soft);
 	border-radius: 9px;
 	color: var(--fg-2);

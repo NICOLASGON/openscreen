@@ -146,7 +146,7 @@
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 	padding: 5px;
-	background: var(--surface);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: var(--r-md);
 	box-shadow: var(--elev-pop);
@@ -318,7 +318,7 @@
 	max-height: min(360px, calc(100vh - 96px));
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	background: var(--surface);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: var(--r-md);
 	box-shadow: var(--elev-pop);
@@ -683,7 +683,7 @@
 	max-height: 100%;
 	display: flex;
 	flex-direction: column;
-	background: var(--surface-1);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 16px;
 	box-shadow: var(--elev-pop);
@@ -703,7 +703,7 @@
 	align-items: center;
 	gap: 4px;
 	padding: 6px;
-	background: var(--surface-1);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 14px;
 	box-shadow: var(--elev-pop);
