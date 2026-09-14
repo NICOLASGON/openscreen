@@ -369,6 +369,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		<ModalShell
 			open={open}
 			onClose={handleClose}
+			// Nothing here wants 960px: the widest row is three quality cards, and at the
+			// default each one got ~290px to hold "720p" over "1280 × 720". The choices
+			// were swimming in their own plates.
+			compact
 			title={t("exportDialog.title")}
 			subtitle={t("exportDialog.subtitle")}
 		>

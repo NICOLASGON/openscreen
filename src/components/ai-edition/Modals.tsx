@@ -42,12 +42,13 @@ export function ModalShell({
 	closeOnEscape = true,
 	title,
 	subtitle,
-	wide,
+	compact,
 	children,
 }: BaseModalProps & {
 	title: string;
 	subtitle?: string;
-	wide?: boolean;
+	/** 720px instead of the 960px default — the ordinary dialog width. */
+	compact?: boolean;
 	/** Off for a dialog that handles Escape itself — two listeners both fire for one
 	 *  keypress, and this one's `onClose` wins whatever order they registered in. */
 	closeOnEscape?: boolean;
@@ -83,7 +84,7 @@ export function ModalShell({
 			aria-labelledby="modal-title"
 		>
 			<div className={styles.modalBackdrop} aria-hidden onClick={onClose} />
-			<div className={`${styles.modalCard} ${wide ? styles.wide : ""}`}>
+			<div className={`${styles.modalCard} ${compact ? styles.compact : ""}`}>
 				<header className={styles.modalHead}>
 					<div>
 						<h2 id="modal-title">{title}</h2>
@@ -145,7 +146,7 @@ export function OpenProjectModal({
 			onClose={onClose}
 			title={t("openProjectDialog.title")}
 			subtitle={t("openProjectDialog.subtitle")}
-			wide
+			compact
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
 				<FolderOpen size={14} style={{ color: "var(--muted)" }} />
@@ -1027,7 +1028,7 @@ export function EditClipModal({
 			onClose={onClose}
 			title={t("editClipDialog.title")}
 			subtitle={assetMeta?.label ?? undefined}
-			wide
+			compact
 		>
 			<div ref={cropFrameRef} style={previewBoxStyle(videoAspectRatio)}>
 				{cropPreviewSource ? (

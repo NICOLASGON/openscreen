@@ -1883,7 +1883,11 @@
 	overflow: hidden;
 	color: var(--fg);
 }
-.modalCard.wide { width: min(720px, 92vw); }
+/* Named for what it does. It was `.wide`, which narrowed: the unmodified card is
+   960px and this modifier takes it DOWN to 720, so every dialog that wanted the
+   ordinary size had to ask for "wide" and the genuinely wide ones asked for
+   nothing. 720 is the house dialog width — three of them already sat here. */
+.modalCard.compact { width: min(720px, 92vw); }
 .modalHead {
 	display: flex;
 	align-items: flex-start;
