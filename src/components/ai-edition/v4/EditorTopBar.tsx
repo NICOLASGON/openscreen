@@ -1,4 +1,5 @@
 import {
+	Check,
 	ChevronDown,
 	Download,
 	Film,
@@ -17,10 +18,17 @@ import {
 	Sparkles,
 	Sun,
 } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+	type KeyboardEvent as ReactKeyboardEvent,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import logoMark from "@/assets/openscreen-mark.png";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useTheme } from "@/hooks/useTheme";
+import type { Locale } from "@/i18n/config";
 import { getAvailableLocales, getLocaleName, getLocaleShort } from "@/i18n/loader";
 import styles from "./EditorShellV4.module.css";
 
@@ -463,11 +471,28 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 	);
 }
 
+/** The bar's one settings menu that is not the app menu.
+ *
+ *  It was a click-only popover: no Escape, no arrow keys, no focus to return to, and
+ *  `aria-pressed` on a control that opens a menu rather than toggling a state. The
+ *  app menu twenty lines up already does all of this properly, so this follows it
+ *  rather than inventing a second set of manners for the same gesture.
+ *
+ *  The list is thirteen entries in eleven scripts, which shapes two decisions below:
+ *  the keyboard opens onto the language you are already in rather than the top of
+ *  the list, and typeahead matches the locale code as well as the native name —
+ *  nobody reaches 日本語 by typing its own name on a Latin keyboard. */
 function LangButton() {
 	const { locale, setLocale } = useI18n();
 	const t = useScopedT("editor");
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement | null>(null);
+	const menuRef = useRef<HTMLDivElement | null>(null);
+	const triggerRef = useRef<HTMLButtonElement | null>(null);
+	// Stable across renders so it can be a dependency below without re-firing.
+	const locales = useMemo(() => getAvailableLocales(), []);
+	const typeahead = useRef({ buffer: "", at: 0 });
+
 	useEffect(() => {
 		if (!open) return;
 		const onDocClick = (e: MouseEvent) => {
@@ -476,38 +501,133 @@ function LangButton() {
 		document.addEventListener("mousedown", onDocClick);
 		return () => document.removeEventListener("mousedown", onDocClick);
 	}, [open]);
+
+	// Land on the current language, not on the top of the list: opening the menu
+	// should show you where you are, and it makes escaping a mis-click free.
+	useEffect(() => {
+		if (!open) return;
+		const items = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+		const at = locales.indexOf(locale);
+		items?.[at >= 0 ? at : 0]?.focus();
+	}, [open, locale, locales]);
+
+	const close = (restoreFocus: boolean) => {
+		setOpen(false);
+		// Escape and a pick hand focus back to the trigger; a click does not, because
+		// the pointer user did not come from there and a ring appearing under the
+		// cursor reads as a bug.
+		if (restoreFocus) triggerRef.current?.focus();
+	};
+
+	const itemsInMenu = () =>
+		Array.from(
+			menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [],
+		);
+
+	const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close(true);
+			return;
+		}
+		// Tabbing out is a legitimate way to leave; closing without stealing focus
+		// back lets it land wherever Tab was going.
+		if (e.key === "Tab") {
+			setOpen(false);
+			return;
+		}
+		const list = itemsInMenu();
+		if (list.length === 0) return;
+		const at = list.indexOf(document.activeElement as HTMLButtonElement);
+		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			e.preventDefault();
+			const next = e.key === "ArrowDown" ? at + 1 : at - 1;
+			// Wraps both ways; `at` is -1 when focus escaped the list, and ArrowDown
+			// then lands on 0.
+			list[(next + list.length) % list.length]?.focus();
+			return;
+		}
+		if (e.key === "Home" || e.key === "End") {
+			e.preventDefault();
+			(e.key === "Home" ? list[0] : list[list.length - 1])?.focus();
+			return;
+		}
+		if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return;
+		const now = Date.now();
+		const buffer = now - typeahead.current.at < 600 ? typeahead.current.buffer + e.key : e.key;
+		typeahead.current = { buffer, at: now };
+		const needle = buffer.toLowerCase();
+		// The code as well as the name: "Français" is reachable by typing it, 日本語
+		// is not, and "ja" is what a Latin keyboard can actually produce.
+		const hit = locales.findIndex(
+			(code) =>
+				getLocaleName(code).toLowerCase().startsWith(needle) ||
+				code.toLowerCase().startsWith(needle),
+		);
+		if (hit >= 0) {
+			e.preventDefault();
+			list[hit]?.focus();
+		}
+	};
+
+	const choose = (code: Locale) => {
+		setLocale(code);
+		close(true);
+	};
+
 	return (
 		<div ref={ref} className={styles.langAnchor}>
 			<button
+				ref={triggerRef}
 				type="button"
 				className={`${styles.iconBtn} ${styles.langBtn}`}
 				onClick={() => setOpen((v) => !v)}
+				onKeyDown={(e) => {
+					if (e.key === "ArrowDown" && !open) {
+						e.preventDefault();
+						setOpen(true);
+					}
+				}}
+				aria-haspopup="menu"
+				aria-expanded={open}
 				aria-label={t("topbar.changeLanguage")}
-				aria-pressed={open}
 			>
-				<Languages size={15} className={styles.langIcon} />
+				<Languages size={15} className={styles.langIcon} aria-hidden />
 				{/* Fixed-width, centred: the short labels run from "EN" to "PT-BR" to
 				    the CJK "简中", and letting the button size to them moved everything
 				    to its right on each language change. */}
 				<span className={styles.langShort}>{getLocaleShort(locale)}</span>
-				<ChevronDown size={9} className={styles.langChevron} />
+				<ChevronDown size={9} className={styles.langChevron} aria-hidden />
 			</button>
 			{open ? (
-				<div className={styles.langMenu}>
-					{getAvailableLocales().map((code) => (
-						<button
-							key={code}
-							type="button"
-							className={styles.langMenuItem}
-							data-active={code === locale}
-							onClick={() => {
-								setLocale(code);
-								setOpen(false);
-							}}
-						>
-							{getLocaleName(code)}
-						</button>
-					))}
+				<div
+					ref={menuRef}
+					className={styles.langMenu}
+					role="menu"
+					aria-label={t("topbar.changeLanguage")}
+					onKeyDown={onMenuKeyDown}
+				>
+					{locales.map((code) => {
+						const active = code === locale;
+						return (
+							<button
+								key={code}
+								type="button"
+								role="menuitemradio"
+								aria-checked={active}
+								className={styles.langMenuItem}
+								data-active={active}
+								onClick={() => choose(code)}
+							>
+								{/* The tick, not the colour, is what says "this one". The gutter is
+								    always there so the names stay on one left edge. */}
+								<span className={styles.langMenuCheck} aria-hidden>
+									{active ? <Check size={13} /> : null}
+								</span>
+								{getLocaleName(code)}
+							</button>
+						);
+					})}
 				</div>
 			) : null}
 		</div>

@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ProjectNameField is a private helper inside EditorTopBar, so reach it through
 // the public topbar instead. The translator echoes keys; assertions read better
 // against keys than against prose that drifts with copy edits.
+//
+// The locale is settable rather than pinned to "en": "en" sorts first among the
+// thirteen, so with it fixed there is no way to tell "opens on the language you
+// are in" apart from "opens on the first row".
+const i18n = vi.hoisted(() => ({ locale: "en", setLocale: vi.fn() }));
 vi.mock("@/contexts/I18nContext", () => ({
-	useI18n: () => ({ locale: "en", setLocale: () => {} }),
+	useI18n: () => ({ locale: i18n.locale, setLocale: i18n.setLocale }),
 	useScopedT: () => (key: string) => key,
 }));
 
@@ -15,7 +20,17 @@ vi.mock("@/hooks/useTheme", () => ({
 	useTheme: () => ({ theme: "dark", toggle: () => {} }),
 }));
 
+import { getAvailableLocales } from "@/i18n/loader";
 import { EditorTopBar } from "./EditorTopBar";
+
+/** Row order is the loader's, not this file's guess at it. */
+const getLocaleIndex = (code: string) => getAvailableLocales().indexOf(code);
+
+beforeEach(() => {
+	i18n.locale = "en";
+	i18n.setLocale.mockClear();
+});
+afterEach(cleanup);
 
 const noop = () => {};
 
@@ -309,6 +324,100 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		expect(langBtn).toHaveTextContent("EN");
 		fireEvent.click(langBtn);
 		expect(screen.getByText("English")).toBeInTheDocument();
+	});
+});
+
+describe("EditorTopBar language menu", () => {
+	const openMenu = () => {
+		renderTopBar("Demo Project");
+		const trigger = screen.getByRole("button", { name: "topbar.changeLanguage" });
+		fireEvent.click(trigger);
+		return { trigger, items: () => screen.getAllByRole("menuitemradio") };
+	};
+
+	// It announced itself with aria-pressed, which says "this control is a toggle
+	// that is currently on" — it opens a menu.
+	it("announces itself as a menu trigger, not as a pressed toggle", () => {
+		renderTopBar("Demo Project");
+		const trigger = screen.getByRole("button", { name: "topbar.changeLanguage" });
+		expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+		expect(trigger).toHaveAttribute("aria-expanded", "false");
+		expect(trigger).not.toHaveAttribute("aria-pressed");
+		fireEvent.click(trigger);
+		expect(trigger).toHaveAttribute("aria-expanded", "true");
+	});
+
+	// The chosen language used to be marked by colour alone, which does not reach
+	// a screen reader and did not survive the contrast fix either.
+	it("marks the current language to something other than the eye", () => {
+		i18n.locale = "fr";
+		const { items } = openMenu();
+		const checked = items().filter((i) => i.getAttribute("aria-checked") === "true");
+		expect(checked).toHaveLength(1);
+		expect(checked[0]).toHaveTextContent("Français");
+	});
+
+	it("opens onto the language in use rather than the top of the list", () => {
+		i18n.locale = "fr";
+		const { items } = openMenu();
+		expect(document.activeElement).toBe(items()[getLocaleIndex("fr")]);
+		expect(document.activeElement).toHaveTextContent("Français");
+	});
+
+	it("closes on Escape and hands focus back to the trigger", () => {
+		const { trigger } = openMenu();
+		fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		expect(document.activeElement).toBe(trigger);
+	});
+
+	it("walks the list with the arrow keys, wrapping at both ends", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		const all = items();
+		expect(document.activeElement).toBe(all[0]);
+		fireEvent.keyDown(menu, { key: "ArrowDown" });
+		expect(document.activeElement).toBe(all[1]);
+		fireEvent.keyDown(menu, { key: "ArrowUp" });
+		fireEvent.keyDown(menu, { key: "ArrowUp" });
+		expect(document.activeElement).toBe(all[all.length - 1]);
+		fireEvent.keyDown(menu, { key: "Home" });
+		expect(document.activeElement).toBe(all[0]);
+		fireEvent.keyDown(menu, { key: "End" });
+		expect(document.activeElement).toBe(all[all.length - 1]);
+	});
+
+	it("jumps to a language by its typed name", () => {
+		openMenu();
+		fireEvent.keyDown(screen.getByRole("menu"), { key: "f" });
+		expect(document.activeElement).toHaveTextContent("Français");
+	});
+
+	// Typing the native name only reaches the ones a Latin keyboard can produce,
+	// so the locale code has to match too or 日本語 is unreachable by keyboard.
+	it("jumps by locale code for the names a keyboard cannot type", () => {
+		const { items } = openMenu();
+		fireEvent.keyDown(screen.getByRole("menu"), { key: "j" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("ja-JP")]);
+	});
+
+	// Consecutive keys inside the window accumulate, which is what makes "po"
+	// reach Português instead of stopping at the first p.
+	it("accumulates consecutive keystrokes into one search", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		fireEvent.keyDown(menu, { key: "p" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("pt-BR")]);
+		fireEvent.keyDown(menu, { key: "o" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("pt-BR")]);
+	});
+
+	it("picks a language and closes, returning focus to the trigger", () => {
+		const { trigger, items } = openMenu();
+		fireEvent.click(items()[getLocaleIndex("fr")]);
+		expect(i18n.setLocale).toHaveBeenCalledWith("fr");
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		expect(document.activeElement).toBe(trigger);
 	});
 
 	// Language and theme are the bar's two app-wide preferences, and they are meant
