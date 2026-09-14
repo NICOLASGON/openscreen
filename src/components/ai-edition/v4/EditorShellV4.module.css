@@ -1419,26 +1419,38 @@
 	margin-left: auto;
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: 18px;
 }
+/* Passive text: nothing here is clickable, so it carries no plate of its own —
+   a bordered pill around a hint advertises an affordance that isn't there, and
+   two of them side by side read as a pair of dead buttons. The keycap below is
+   the one bordered thing, because there the border IS the content. */
 .tlHint {
 	display: inline-flex;
 	align-items: center;
-	gap: 7px;
-	height: 26px;
-	padding: 0 10px;
-	background: var(--surface-1);
-	border: 1px solid var(--border);
-	border-radius: 7px;
+	gap: 6px;
 	font-size: 11px;
 	font-weight: 500;
 	color: var(--muted);
 }
+/* The same keycap as .recMenuKey's, so a key looks like a key everywhere in this
+   app rather than this toolbar inventing a second one — plus a floor on the
+   width, so "⇧" and "⌃" don't come out two different sizes sitting side by side.
+   Deliberately NOT --font-mono: a monospace face on a two-character label is a
+   typographic costume, and it is what made these read as generated. The one
+   divergence is the text colour: .recMenuKey is --muted against --fg rows, while
+   here the label beside it is already --muted, so the key takes --fg-2 to stay
+   the emphasised half of the pair. */
 .tlKbd {
-	font-family: var(--font-mono);
-	font-size: 10.5px;
-	font-weight: 600;
+	display: inline-grid;
+	place-items: center;
+	min-width: 20px;
+	padding: 2px 6px;
+	border: 1px solid var(--border-soft);
+	border-radius: 5px;
+	background: var(--surface-2);
 	color: var(--fg-2);
+	font: 600 10.5px/1.4 var(--font-body);
 }
 /* Ruler + tracks live in one relative wrapper (between the toolbar and the zoom
    bar) so a single playhead overlay can span both. */
