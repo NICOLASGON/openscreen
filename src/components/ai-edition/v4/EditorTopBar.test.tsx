@@ -277,4 +277,20 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		fireEvent.click(langBtn);
 		expect(screen.getByText("English")).toBeInTheDocument();
 	});
+
+	// Language and theme are the bar's two app-wide preferences, and they are meant
+	// to read as one pair at its right end. Nothing about either button says where it
+	// belongs, so without this the language selector drifts back among the file
+	// actions the first time someone reorders the header.
+	it("seats the language selector immediately before the theme toggle", () => {
+		renderTopBar("Demo Project");
+		const langBtn = screen.getByRole("button", { name: "topbar.changeLanguage" });
+		const themeBtn = screen.getByRole("button", { name: "topbar.toggleTheme" });
+		// The selector is wrapped in its own popover anchor, so the sibling that
+		// precedes the theme button is that anchor, not the button itself.
+		expect(themeBtn.previousElementSibling).toBe(langBtn.closest("div"));
+		expect(
+			langBtn.compareDocumentPosition(themeBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
 });

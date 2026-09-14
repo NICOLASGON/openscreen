@@ -135,7 +135,6 @@ export function EditorTopBar({
 				) : null}
 			</button>
 			<span className={styles.sep} aria-hidden />
-			<LangButton />
 			{/* Both states are always rendered, stacked in one grid cell, so the slot
 			    keeps the width of the longer label and the bar doesn't twitch every
 			    time the document goes dirty. The inactive one is visibility:hidden,
@@ -173,6 +172,11 @@ export function EditorTopBar({
 				))}
 			</div>
 
+			{/* Language and theme are the two app-wide preferences in this bar, so they
+			    sit together at its right end rather than one of them being stranded
+			    among the per-project file actions. .langMenu is anchored right:0, so
+			    it opens leftwards from here and stays on screen. */}
+			<LangButton />
 			<button
 				type="button"
 				className={styles.iconBtn}
