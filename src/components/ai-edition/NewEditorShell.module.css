@@ -1232,24 +1232,51 @@
 	gap: var(--sp-2);
 	margin-bottom: 6px;
 }
-.ctxPill {
+/* No pill, no wash, no dot. The badge chrome made a passive readout look like a
+   status chip, and the dot was the only thing carrying the state — in a colour
+   that never changed. The row is now the meter plus its number. */
+.ctxMeter {
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
-	padding: 3px 9px 3px 7px;
+	gap: 7px;
+}
+/* Same-ramp track: the groove and the fill are two steps of one hue, so the bar
+   reads as "this much of that" rather than as two competing colours. */
+.ctxTrack {
+	width: 38px;
+	height: 4px;
 	border-radius: var(--r-pill);
-	background: var(--success-soft);
-	color: var(--success);
-	font-family: var(--font-mono);
+	background: var(--accent-soft);
+	overflow: hidden;
+	flex-shrink: 0;
+}
+.ctxFill {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--accent);
+	transition: width var(--motion-base) var(--ease), background var(--motion-base) var(--ease);
+}
+.ctxLabel {
 	font-size: 10.5px;
 	font-weight: 500;
-	letter-spacing: 0.02em;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
 }
-.ctxPill .d {
-	width: 5px;
-	height: 5px;
-	border-radius: 50%;
-	background: var(--success);
+.ctxWarnIcon {
+	color: var(--warn);
+	flex-shrink: 0;
+}
+/* Past the threshold the ramp moves to the warning hue — and the glyph appears in
+   the same breath. --warn sits below 3:1 on this surface by design; the icon is
+   what makes the state legible without it, not a decoration beside it.
+   The label deliberately stays --muted: amber text would be the least readable
+   thing in the row, which is the trap the old mint pill fell into. */
+.ctxMeter[data-tight="true"] .ctxTrack {
+	background: var(--warn-soft);
+}
+.ctxMeter[data-tight="true"] .ctxFill {
+	background: var(--warn);
 }
 .stripActions {
 	margin-left: auto;
@@ -1368,16 +1395,29 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	padding: 5px 4px 5px 10px;
+	/* 4px on the right was cut for a trailing element this button no longer has, so
+	   the label ran into the edge of its own pill. The right side gets a little MORE
+	   than the left rather than matching it: the left edge is followed by a glyph,
+	   which carries its own whitespace, and a text edge needs more room than a mark
+	   to sit the same distance away. */
+	padding: 5px 12px 5px 10px;
 	border-radius: var(--r-pill);
 	background: var(--surface-2);
-	font-family: var(--font-mono);
 	font-size: 11px;
 	color: var(--fg-2);
-	letter-spacing: 0.01em;
 	cursor: pointer;
 	transition: background var(--motion-fast) var(--ease);
 	border: 0;
+}
+/* This button's label is two different kinds of string. With a provider set it
+   is a bare model id — "claude-opus-5", "gpt-4o-mini" — which is a machine
+   string and keeps the monospace the whole button used to wear. With none set
+   it is a sentence asking you to pick one, and prose in a monospace face reads
+   as a terminal transcript rather than as a button. The face follows the
+   content, not the slot. */
+.modelId {
+	font-family: var(--font-mono);
+	letter-spacing: 0.01em;
 }
 .modelPicker:hover { background: var(--surface-3); }
 .reasoningBtn {
