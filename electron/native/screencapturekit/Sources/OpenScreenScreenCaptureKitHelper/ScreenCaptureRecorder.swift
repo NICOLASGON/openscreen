@@ -297,6 +297,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			audioMixer?.beginTimeline(at: presentationTime)
 			startAudioTicker()
 		}
+		// Checked before the readiness gate, not only at a false append: a failed
+		// writer is not guaranteed to call itself ready, and an append that is never
+		// attempted can never report the failure (issue #621).
+		if writer.status == .failed {
+			reportWriterFailure("writer status")
+			return
+		}
 
 		if videoInput.isReadyForMoreMediaData {
 			let appended = videoInput.append(sampleBuffer)
@@ -330,6 +337,12 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	/// settles and every failure becomes the "Saving..." hang instead of an error.
 	/// This event answers "when did the writer die"; that one answers "did stopping
 	/// work". Two questions, two codes.
+	///
+	/// It also ends the capture, the way `didStopWithError` does. A failed writer
+	/// never recovers, so every frame after it is dropped; issue #621 is a take
+	/// whose writer died at 75 s while capture ran on for 22 more minutes. The
+	/// process stays up and still answers `stop`, so the Electron stop path works
+	/// unchanged and reads this event back as the reason.
 	private func reportWriterFailure(_ stage: String) {
 		guard !didReportWriterFailure, let writer else {
 			return
@@ -337,10 +350,14 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		didReportWriterFailure = true
 		emitError(
 			code: "writer-failed-during-capture",
-			message: "\(stage): "
+			message: "Recording stopped: the video file could not be written (\(stage): "
 				+ (writer.error.map { "\($0)" }
-					?? "AVAssetWriter status \(writer.status.rawValue)"),
+					?? "AVAssetWriter status \(writer.status.rawValue)")
+				+ ").",
 		)
+		Task {
+			await stop()
+		}
 	}
 
 	private func ensureRequestedPermissions() throws {
@@ -604,7 +621,16 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			leeway: .milliseconds(5)
 		)
 		timer.setEventHandler { [weak self] in
-			self?.audioMixer?.tick()
+			guard let self else {
+				return
+			}
+			// A still screen delivers no complete frames, so the frame path alone
+			// could sit on a dead writer for as long as nothing on screen moves.
+			if self.writer?.status == .failed {
+				self.reportWriterFailure("writer status")
+				return
+			}
+			self.audioMixer?.tick()
 		}
 		audioTicker = timer
 		timer.resume()

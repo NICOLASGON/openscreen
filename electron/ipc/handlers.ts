@@ -1485,8 +1485,12 @@ function inspectNativeMacCaptureOutput() {
 	}
 }
 
-function attachNativeMacCaptureOutputDrain(proc: ChildProcessWithoutNullStreams) {
+function attachNativeMacCaptureOutputDrain(
+	proc: ChildProcessWithoutNullStreams,
+	onErrorDuringCapture: () => void,
+) {
 	let lineBuffer = "";
+	let recordingStarted = false;
 	const drain = (chunk: Buffer) => {
 		const text = chunk.toString();
 		nativeMacCaptureOutput += text;
@@ -1497,6 +1501,18 @@ function attachNativeMacCaptureOutputDrain(proc: ChildProcessWithoutNullStreams)
 			const event = tryParseNativeHelperEvent(line.trim());
 			if (event) {
 				dispatchNativeMacHelperEvent(event);
+				if (event.event === "recording-started") {
+					recordingStarted = true;
+				}
+				// The start and stop waits only listen while they are pending, so an
+				// error the helper raises mid-take (a dead writer, a stream that
+				// stopped) used to sit in the buffer until the user pressed stop, while
+				// the HUD counted on for minutes (issue #621). Hooked here rather than
+				// on `nativeMacCaptureEvents`, which the stop wait replays from the
+				// buffer: this sees each line once, live.
+				if (event.event === "error" && recordingStarted && nativeMacCaptureProcess === proc) {
+					onErrorDuringCapture();
+				}
 			}
 		}
 	};
@@ -2825,7 +2841,14 @@ export function registerIpcHandlers(
 				stdio: ["pipe", "pipe", "pipe"],
 			});
 			nativeMacCaptureProcess = proc;
-			attachNativeMacCaptureOutputDrain(proc);
+			// Drives the renderer's own stop, the same one the tray's Stop Recording
+			// sends: it clears the HUD and surfaces the helper's error as the result.
+			attachNativeMacCaptureOutputDrain(proc, () => {
+				const hudWindow = getMainWindow();
+				if (hudWindow && !hudWindow.isDestroyed()) {
+					hudWindow.webContents.send("stop-recording-from-tray");
+				}
+			});
 
 			await waitForNativeMacCaptureStart(proc);
 			const captureStartedAtMs = Date.now();
