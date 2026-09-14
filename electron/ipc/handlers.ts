@@ -93,6 +93,7 @@ import {
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
+import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
 import { registerRecordingPrefsHandlers } from "./recordingPrefs";
 import { RecordingStreamRegistry, registerRecordingStreamHandlers } from "./recordingStream";
 
@@ -1490,7 +1491,12 @@ function attachNativeMacCaptureOutputDrain(
 	onErrorDuringCapture: () => void,
 ) {
 	let lineBuffer = "";
-	let recordingStarted = false;
+	// Hooked here rather than on `nativeMacCaptureEvents`, which the stop wait
+	// replays from the buffer: the drain sees each line once, live.
+	const watchForMidCaptureError = createNativeMacMidCaptureErrorWatch(
+		() => nativeMacCaptureProcess === proc,
+		onErrorDuringCapture,
+	);
 	const drain = (chunk: Buffer) => {
 		const text = chunk.toString();
 		nativeMacCaptureOutput += text;
@@ -1501,18 +1507,7 @@ function attachNativeMacCaptureOutputDrain(
 			const event = tryParseNativeHelperEvent(line.trim());
 			if (event) {
 				dispatchNativeMacHelperEvent(event);
-				if (event.event === "recording-started") {
-					recordingStarted = true;
-				}
-				// The start and stop waits only listen while they are pending, so an
-				// error the helper raises mid-take (a dead writer, a stream that
-				// stopped) used to sit in the buffer until the user pressed stop, while
-				// the HUD counted on for minutes (issue #621). Hooked here rather than
-				// on `nativeMacCaptureEvents`, which the stop wait replays from the
-				// buffer: this sees each line once, live.
-				if (event.event === "error" && recordingStarted && nativeMacCaptureProcess === proc) {
-					onErrorDuringCapture();
-				}
+				watchForMidCaptureError(event);
 			}
 		}
 	};

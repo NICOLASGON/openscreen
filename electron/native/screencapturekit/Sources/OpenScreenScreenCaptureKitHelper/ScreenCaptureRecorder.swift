@@ -130,7 +130,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var didStartWriting = false
 	private var didEmitRecordingStarted = false
 	private var didReportWriterFailure = false
-	private var isStopping = false
+	/// The one shutdown, however many callers ask for it. A writer failure starts it on
+	/// its own task, and the `stop` Electron sends right after has to wait for that run:
+	/// the command loop exits the process as soon as `stop()` returns, which would cut
+	/// `finishWriter()` off before its terminal event.
+	private var shutdownTask: Task<Void, Never>?
 	private var isPaused = false
 	private var pauseStartedAt: CMTime?
 	private var totalPausedDuration = CMTime.zero
@@ -182,17 +186,20 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	}
 
 	func stop() async {
-		let shouldStop = stateQueue.sync {
-			if isStopping {
-				return false
+		let task = stateQueue.sync { () -> Task<Void, Never> in
+			if let shutdownTask {
+				return shutdownTask
 			}
-			isStopping = true
-			return true
+			let task = Task {
+				await self.performStop()
+			}
+			shutdownTask = task
+			return task
 		}
-		if !shouldStop {
-			return
-		}
+		await task.value
+	}
 
+	private func performStop() async {
 		do {
 			try await stream?.stopCapture()
 		} catch {
@@ -208,7 +215,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 	func pause() {
 		let didPause = stateQueue.sync {
-			if isStopping || isPaused {
+			if shutdownTask != nil || isPaused {
 				return false
 			}
 
@@ -227,7 +234,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 	func resume() {
 		let didResume = stateQueue.sync {
-			if isStopping || !isPaused {
+			if shutdownTask != nil || !isPaused {
 				return false
 			}
 
