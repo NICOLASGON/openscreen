@@ -423,11 +423,27 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+/* The selected segment is a plate that LIFTS off the track, the way a segmented
+   control has worked since the first one — so it takes --surface-hi, which is
+   the raised surface in both themes.
+
+   It used to take --surface-3, and that token does not mean the same thing on
+   each side: the light scale runs downward in lightness (#f1f5f9 → #cbd5e1) and
+   the dark scale runs upward (#14181f → #252a35). So one declaration produced a
+   plate that rose by ΔL +0.014 in dark and sank by ΔL -0.251 in light — the
+   selected tab was the heaviest grey in the control, reading as pressed-out
+   rather than picked.
+
+   The shadow goes to the system's own token too, in flat black no longer but in
+   the slate the rest of the app casts. --elev-card rather than --elev-card-soft:
+   white on --surface-1 separates by only ΔL* ~3.6 (macOS gives its own segmented
+   control ~9), so the plate needs the wider, softer half of the card shadow to
+   read at all — a 1px hairline alone would leave it floating. */
 .modeSwitch button[aria-selected="true"] {
-	background: var(--surface-3);
+	background: var(--surface-hi);
 	color: var(--fg-emphasis);
 	font-weight: 600;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+	box-shadow: var(--elev-card);
 }
 .exportBtn {
 	display: inline-flex;
