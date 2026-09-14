@@ -22,6 +22,7 @@ import {
 	resolvePlaybackSegments,
 	restoreFullTimeline,
 	setClipSourceRange,
+	splitClipAt,
 	subtractInterval,
 	timelineIntervals,
 } from "./timeline";
@@ -1738,5 +1739,125 @@ describe("projectRawTimelineSecToPlayback with speed regions", () => {
 	it("ignores a nonsense rate rather than dividing by it", () => {
 		const speed = [{ startMs: 0, endMs: 4000, speed: 0 }];
 		expect(projectRawTimelineSecToPlayback([clip], [], 4, speed)).toBeCloseTo(4, 6);
+	});
+});
+
+// Cutting a clip in two at a point in its own media. The pair a split produces is
+// joinable BY CONSTRUCTION — same asset, timecodes that meet, same crop — so the
+// whole of this feature rests on `splitFromPrevious` surviving withClipsChanged.
+// The first test is the one that would have caught shipping a silent no-op.
+describe("splitClipAt", () => {
+	const oneClip = (overrides: Partial<AxcutClip> = {}) =>
+		makeDoc({
+			timeline: {
+				clips: [
+					makeClip({
+						id: "clip_1",
+						sourceStartSec: 0,
+						sourceEndSec: 10,
+						timelineEndSec: 10,
+						...overrides,
+					}),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+
+	it("leaves two clips behind, meeting at the cut", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		expect(out.timeline.clips).toHaveLength(2);
+		expect(out.timeline.clips[0]).toMatchObject({ sourceStartSec: 0, sourceEndSec: 4 });
+		expect(out.timeline.clips[1]).toMatchObject({ sourceStartSec: 4, sourceEndSec: 10 });
+	});
+
+	it("marks the tail so the contiguity fold cannot undo the cut", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		expect(out.timeline.clips[1].splitFromPrevious).toBe(true);
+		// And it holds through a LATER structural edit, not just the one that made it —
+		// every edit ends in withClipsChanged, so one that re-folded would lose the cut
+		// the next time anything moved.
+		const again = resequenceClips(out.timeline.clips);
+		expect(
+			rederiveRegionMs({ ...out, timeline: { ...out.timeline, clips: again } }, again).timeline
+				.clips,
+		).toHaveLength(2);
+	});
+
+	it("lays the halves back-to-back with no gap and no change in total length", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		const [a, b] = out.timeline.clips;
+		expect(a.timelineStartSec).toBe(0);
+		expect(a.timelineEndSec).toBe(4);
+		expect(b.timelineStartSec).toBe(4);
+		expect(b.timelineEndSec).toBe(10);
+	});
+
+	it("keeps the original's id on the head, so what was anchored to it stays anchored", () => {
+		const out = splitClipAt(oneClip(), "clip_1", 4);
+		expect(out.timeline.clips[0].id).toBe("clip_1");
+		expect(out.timeline.clips[1].id).not.toBe("clip_1");
+	});
+
+	// A split control is pressed with the playhead parked wherever it happens to be.
+	it("is a no-op on an unknown clip, outside the clip, or too close to either end", () => {
+		const doc = oneClip();
+		expect(splitClipAt(doc, "nope", 4)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 0)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 10)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 0.01)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 9.99)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", 40)).toBe(doc);
+		expect(splitClipAt(doc, "clip_1", Number.NaN)).toBe(doc);
+	});
+
+	it("gives each half only the trim that still falls inside it", () => {
+		const doc = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+				],
+				gaps: [],
+				trimRanges: [
+					makeTrim({ id: "t_head", clipId: "clip_1", startSec: 1, endSec: 2 }),
+					makeTrim({ id: "t_tail", clipId: "clip_1", startSec: 7, endSec: 8 }),
+				],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const out = splitClipAt(doc, "clip_1", 4);
+		const [head, tail] = out.timeline.clips;
+		const windowsOf = (clipId: string) =>
+			out.timeline.trimRanges.filter((t) => t.clipId === clipId).map((t) => [t.startSec, t.endSec]);
+		expect(windowsOf(head.id)).toEqual([[1, 2]]);
+		expect(windowsOf(tail.id)).toEqual([[7, 8]]);
+	});
+
+	it("cuts a trim that straddles the split down to each side of it", () => {
+		const doc = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+				],
+				gaps: [],
+				trimRanges: [makeTrim({ id: "t_across", clipId: "clip_1", startSec: 3, endSec: 6 })],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const out = splitClipAt(doc, "clip_1", 4);
+		const [head, tail] = out.timeline.clips;
+		const windowsOf = (clipId: string) =>
+			out.timeline.trimRanges.filter((t) => t.clipId === clipId).map((t) => [t.startSec, t.endSec]);
+		// The same span, still covered end to end — just carried by two rows now,
+		// because a trim names one clip and there are two of them here.
+		expect(windowsOf(head.id)).toEqual([[3, 4]]);
+		expect(windowsOf(tail.id)).toEqual([[4, 6]]);
 	});
 });

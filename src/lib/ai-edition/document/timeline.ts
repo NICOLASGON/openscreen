@@ -1019,6 +1019,113 @@ export function duplicateClip(
 	);
 }
 
+/** The shortest either half of a split may be. Below this the cut produces a clip
+ *  too short to see, let alone grab. */
+const MIN_SPLIT_HALF_SEC = 0.05;
+
+/**
+ * The single mutator for "cut this clip in two at a point in its own media" — the edit
+ * the timeline's split control performs. Extracted here beside `moveClip`,
+ * `duplicateClip` and `setClipSourceRange` for the same reason they were: so the recipe
+ * has one home instead of being re-derived per façade.
+ *
+ * Recipe: two clips over the original's range, meeting at `sourceSec`. The head keeps the
+ * original's id, so everything already anchored to it stays anchored. The tail is new and
+ * carries `splitFromPrevious`, WITHOUT which `withClipsChanged` folds the pair straight
+ * back into the clip they came from — same asset, timecodes that meet, same crop is the
+ * definition of joinable, and a split satisfies it by construction.
+ *
+ * Both halves' timeline extents are zeroed so `resequenceClips` recomputes them from the
+ * new source windows, exactly as `setClipSourceRange` does.
+ *
+ * The clip's own trims are divided here rather than copied and left to be clamped. That was
+ * the first attempt, on the strength of `setClipSourceRange`'s "drops what the trim removed"
+ * — but `rederiveRegionMs` refreshes a trim's DERIVED ms, and a trim's authoritative window
+ * is its `startSec`/`endSec` in source time, which nothing downstream reconsiders. Copied
+ * wholesale, every trim stayed on both halves, so a cut in the tail went on cutting the head
+ * as well. Each trim is therefore intersected with each half's source window: it lands on
+ * the side that contains it, on both sides cut down when it straddles the split, and on
+ * neither when it is empty there.
+ *
+ * Word refs are recomputed per half from the transcript rather than split by hand, since
+ * that is how they were derived in the first place. With no transcript to recompute from
+ * they stay on the head: wrong in the same direction as before the cut, rather than
+ * duplicated onto both halves.
+ *
+ * A no-op — never a throw — when the clip is unknown, when `sourceSec` falls outside the
+ * clip, or when either half would come out shorter than MIN_SPLIT_HALF_SEC. A split control
+ * is a thing people press with the playhead parked anywhere, including on a clip boundary,
+ * where the honest answer is that there is nothing to cut.
+ */
+export function splitClipAt(
+	document: AxcutDocument,
+	clipId: string,
+	sourceSec: number,
+	origin: "system" | "agent" | "user" = "user",
+	reason: string = "",
+): AxcutDocument {
+	const index = document.timeline.clips.findIndex((c) => c.id === clipId);
+	if (index < 0) return document;
+	const original = document.timeline.clips[index];
+	const from = original.sourceStartSec;
+	const to = original.sourceEndSec;
+	if (to === undefined) return document;
+	if (!Number.isFinite(sourceSec)) return document;
+	if (sourceSec - from < MIN_SPLIT_HALF_SEC || to - sourceSec < MIN_SPLIT_HALF_SEC) {
+		return document;
+	}
+
+	const transcript = document.transcript;
+	const head: AxcutClip = {
+		...original,
+		sourceEndSec: sourceSec,
+		timelineStartSec: 0,
+		timelineEndSec: 0,
+		wordRefs: transcript ? collectWordRefs(transcript, from, sourceSec) : original.wordRefs,
+	};
+	const tail: AxcutClip = {
+		...original,
+		id: createId("clip"),
+		sourceStartSec: sourceSec,
+		timelineStartSec: 0,
+		timelineEndSec: 0,
+		wordRefs: transcript ? collectWordRefs(transcript, sourceSec, to) : [],
+		splitFromPrevious: true,
+		origin,
+		reason: reason || original.reason,
+	};
+
+	const oldClips = document.timeline.clips;
+	const next = [...oldClips.slice(0, index), head, tail, ...oldClips.slice(index + 1)];
+
+	const dividedTrims = document.timeline.trimRanges.flatMap((trim) => {
+		if (trim.clipId !== original.id) return [trim];
+		const parts: typeof document.timeline.trimRanges = [];
+		const headLo = Math.max(trim.startSec, from);
+		const headHi = Math.min(trim.endSec, sourceSec);
+		if (headHi > headLo) parts.push({ ...trim, startSec: headLo, endSec: headHi });
+		const tailLo = Math.max(trim.startSec, sourceSec);
+		const tailHi = Math.min(trim.endSec, to);
+		// A new id only on the tail side: the head kept the original clip's id, so its
+		// share of the trim can keep the trim's too.
+		if (tailHi > tailLo) {
+			parts.push({
+				...trim,
+				id: createId("trim"),
+				clipId: tail.id,
+				startSec: tailLo,
+				endSec: tailHi,
+			});
+		}
+		return parts;
+	});
+
+	return withClipsChanged(
+		{ ...document, timeline: { ...document.timeline, trimRanges: dividedTrims } },
+		next,
+	);
+}
+
 /**
  * The single mutator for "narrow/extend a clip's own source in/out" — the edit the
  * clip's Edit modal, the renderer op dispatcher, and the LLM's `setClipRange` tool all
@@ -1178,10 +1285,15 @@ function joinContiguous(clips: AxcutClip[]): {
 	return { clips: out, absorbed };
 }
 
-/** Same media, media timecodes that meet, same framing. Crop is the only property a clip
- *  carries that two otherwise-identical neighbours could legitimately disagree on, so it is
- *  the whole of the guard. */
+/** Same media, media timecodes that meet, same framing — and nobody asked for a cut here.
+ *
+ *  Crop is the only property a clip carries that two otherwise-identical neighbours could
+ *  legitimately disagree on, so it is the whole of the *incidental* guard. `splitFromPrevious`
+ *  is the deliberate one: a split at the playhead produces a pair this function would
+ *  otherwise call joinable by construction — same asset, timecodes that meet exactly, same
+ *  crop — so without it the fold annihilates the cut on the same call that creates it. */
 function joinable(left: AxcutClip, right: AxcutClip): boolean {
+	if (right.splitFromPrevious) return false;
 	return (
 		left.assetId === right.assetId &&
 		left.sourceEndSec !== undefined &&
