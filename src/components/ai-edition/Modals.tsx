@@ -276,7 +276,8 @@ export function OpenProjectModal({
 											width: 36,
 											height: 36,
 											borderRadius: "var(--r-sm)",
-											background: "linear-gradient(135deg, var(--brand-lo), var(--brand))",
+											background:
+												"linear-gradient(135deg, var(--accent-fill-lo), var(--accent-fill))",
 											display: "grid",
 											placeItems: "center",
 											color: "var(--accent-on)",
@@ -537,7 +538,7 @@ function TemplateCell({
 					width: 36,
 					height: 36,
 					borderRadius: "var(--r-sm)",
-					background: active ? "var(--accent)" : "var(--surface-2)",
+					background: active ? "var(--accent-fill)" : "var(--surface-2)",
 					color: active ? "var(--accent-on)" : "var(--muted)",
 					display: "grid",
 					placeItems: "center",

@@ -1665,8 +1665,8 @@ export function ChatStripPanel() {
 									onClick={() => void confirmRewind(rewindFor.messageId)}
 									style={{
 										padding: "4px 10px",
-										background: "var(--accent)",
-										border: "1px solid var(--accent)",
+										background: "var(--accent-fill)",
+										border: "1px solid var(--accent-fill)",
 										borderRadius: "var(--r-sm)",
 										color: "var(--accent-on)",
 										font: "500 12px var(--font-body)",

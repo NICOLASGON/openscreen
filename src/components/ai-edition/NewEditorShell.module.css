@@ -68,7 +68,7 @@
 	width: 18px;
 	height: 18px;
 	border-radius: 5px;
-	background: var(--accent);
+	background: var(--accent-fill);
 	display: grid;
 	place-items: center;
 	color: var(--accent-on);
@@ -472,7 +472,7 @@
 	gap: var(--sp-2);
 	padding: var(--sp-3) var(--sp-4);
 	border-radius: var(--r-sm);
-	background: var(--primary, #34B27B);
+	background: var(--accent-fill);
 	color: var(--accent-on);
 	border: none;
 	font-weight: 500;
@@ -1102,7 +1102,7 @@
 	left: 2px;
 	width: 16px;
 	height: 16px;
-	background: var(--accent-on);
+	background: #ffffff;
 	border-radius: 50%;
 	box-shadow: 0 1px 3px rgba(22, 23, 29, 0.2);
 	transition: transform 150ms ease;
@@ -1893,11 +1893,11 @@
 }
 .btnSecondary:hover { background: var(--surface-warm); border-color: var(--border-hi); }
 .btnPrimary {
-	background: var(--accent);
+	background: var(--accent-fill);
 	color: var(--accent-on);
-	border: 1px solid var(--accent);
+	border: 1px solid var(--accent-fill);
 }
-.btnPrimary:hover { background: var(--brand-lo); }
+.btnPrimary:hover { background: var(--accent-fill-lo); }
 .btnPrimary:disabled {
 	background: var(--surface-2);
 	border-color: var(--border);
@@ -2311,9 +2311,9 @@
   width: 100%;
   height: 34px;
   border-radius: var(--r-md);
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-on);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-fill);
   font: 600 12.5px var(--font-body);
   cursor: pointer;
   transition: filter 120ms ease;

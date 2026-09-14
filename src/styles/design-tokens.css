@@ -42,7 +42,16 @@
 	--brand-glow: rgba(16, 185, 129, 0.35);
 	--brand-soft: rgba(16, 185, 129, 0.10);
 	--accent: #10b981;
-	--accent-on: #04221a;
+	/* Filled accent surfaces (buttons, active segments, badges) do NOT use
+	   --accent: mint is a border/glow/wash colour, and no readable text sits
+	   on it in light theme -- white is 2.5:1 against it and the near-black it
+	   used to carry was 6.6:1 but muddy at 13px. --accent-fill is the mint
+	   darkened until white text clears AA on it (5.5:1); --accent-fill-lo is
+	   its hover, darker again so hover never *loses* contrast. In dark theme
+	   the pair collapses back onto mint, where dark-on-mint reads at 7.7:1. */
+	--accent-fill: #047857;
+	--accent-fill-lo: #065f46;
+	--accent-on: #ffffff;
 	--accent-soft: rgba(16, 185, 129, 0.10);
 	--accent-wash: rgba(16, 185, 129, 0.06);
 	--accent-border: rgba(16, 185, 129, 0.26);
@@ -193,6 +202,8 @@
 	--brand-glow: rgba(16, 185, 129, 0.40);
 	--brand-soft: rgba(16, 185, 129, 0.14);
 	--accent: #10b981;
+	--accent-fill: #10b981;
+	--accent-fill-lo: #34d399;
 	--accent-on: #0a0d12;
 	--accent-soft: rgba(16, 185, 129, 0.14);
 	--accent-wash: rgba(16, 185, 129, 0.06);
