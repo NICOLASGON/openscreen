@@ -183,6 +183,9 @@ function cardFitsDuration(cardPx: number, text: string): boolean {
 }
 
 const CLIP_GUTTER_PX = 6;
+/** The shortest a clip may be left by a trim — the same floor the Edit modal's
+ *  handles stop at, so the two ways into this edit agree on what "too short" is. */
+const MIN_CLIP_SEC = 0.05;
 /**
  * Shortest region a resize may leave behind — the storage grid itself (regions
  * are `Math.round`ed to whole ms, and coalesceRegionsForRuler's epsilon is 1 ms),
@@ -596,6 +599,9 @@ export function V4Timeline({
 	// The camera lane borrows the Layout pane's "No Webcam" wording when there is no
 	// camera to grow, so the two surfaces say the same thing about the same project.
 	const ts = useScopedT("settings");
+	// The edge handles reuse the Edit modal's own labels: they adjust the same two
+	// numbers, and saying it differently here would be two names for one edit.
+	const te = useScopedT("editor");
 	// Wheel zoom/pan listens on the whole pane (toolbar down through the nav bar),
 	// not just the lanes — a user scrolling over the ruler or the hint labels
 	// expects the same zoom/pan the lanes give, not silence.
@@ -630,6 +636,15 @@ export function V4Timeline({
 		target: number;
 		pointerDeltaX: number;
 		shiftPx: number;
+	} | null>(null);
+	/** A live edge trim. `deltaSec` is the change to the clip's DURATION, which is
+	 *  what the rest of the row has to absorb: clips are laid back-to-back, so a
+	 *  clip that loses half a second pulls everything after it half a second left.
+	 *  Held apart from the committed document so the drag can be abandoned. */
+	const [edgeTrim, setEdgeTrim] = useState<{
+		id: string;
+		edge: "start" | "end";
+		deltaSec: number;
 	} | null>(null);
 	const { settings, set: setSettings } = useEditorSettings();
 
@@ -1404,6 +1419,117 @@ export function V4Timeline({
 	// same document/timeline.ts#moveClip the agent's "moveClip" tool uses.
 	// (That tool takes a neighbour's id rather than this index — the index is
 	// relative to the array with the moved clip already removed, see below.)
+	/** Trim a clip by dragging one of its own edges, instead of opening the Edit
+	 *  modal to move the same two numbers.
+	 *
+	 *  The document work is already solved and shared: `applyClipEdit` →
+	 *  `setClipSourceRange` clamps the range, relays every clip back-to-back, and
+	 *  reclamps the pills anchored inside the window the trim just removed. This
+	 *  only has to turn pointer travel into a source range and hand it over — which
+	 *  is also why an edge trim undoes in one step like any other edit.
+	 *
+	 *  Dragging the START edge does NOT move the clip's left edge on screen. Clips
+	 *  are laid back-to-back from zero, so trimming a clip's head leaves it starting
+	 *  exactly where it started and takes the length off its tail — a ripple trim.
+	 *  The live preview below models that rather than the more literal reading,
+	 *  because the literal one would show a gap the commit will not produce. */
+	const startEdgeTrim = useCallback(
+		(e: ReactPointerEvent, clip: AxcutClip, edge: "start" | "end") => {
+			if (e.button !== 0) return;
+			// Before the panel is measured there is no px→sec rate to drag against.
+			if (!Number.isFinite(pxPerSec) || pxPerSec <= 0) return;
+			// This handle sits inside the clip card, whose own pointerdown starts a
+			// reorder. Only one of the two gestures can own this press.
+			e.preventDefault();
+			e.stopPropagation();
+
+			const fromStart = clip.sourceStartSec;
+			const fromEnd = clip.sourceEndSec ?? 0;
+			// The same bound the Edit modal computes, and for the same reason: it has
+			// to hold the current selection whatever the metadata says, so it falls
+			// back to the out-point. An asset whose duration has not been probed can
+			// therefore be trimmed in but not pulled back out — which is the safe way
+			// round, since the alternative invents footage past the end of the file.
+			const asset = tl.assets.find((a) => a.id === clip.assetId);
+			const sourceDurationSec = Math.max(asset?.durationSec ?? 0, fromEnd, 0.001);
+
+			const startX = e.clientX;
+			let next = { start: fromStart, end: fromEnd };
+			setEdgeTrim({ id: clip.id, edge, deltaSec: 0 });
+
+			const move = (moveEvent: PointerEvent) => {
+				const deltaSec = (moveEvent.clientX - startX) / pxPerSec;
+				next =
+					edge === "start"
+						? {
+								start: Math.min(Math.max(fromStart + deltaSec, 0), fromEnd - MIN_CLIP_SEC),
+								end: fromEnd,
+							}
+						: {
+								start: fromStart,
+								end: Math.max(
+									Math.min(fromEnd + deltaSec, sourceDurationSec),
+									fromStart + MIN_CLIP_SEC,
+								),
+							};
+				setEdgeTrim({
+					id: clip.id,
+					edge,
+					deltaSec: next.end - next.start - (fromEnd - fromStart),
+				});
+			};
+
+			const end = () => {
+				window.removeEventListener("pointermove", move);
+				window.removeEventListener("pointerup", end);
+				setEdgeTrim(null);
+				// A press that never moved is not an edit, and writing one would put an
+				// empty step on the undo stack.
+				const moved =
+					Math.abs(next.start - fromStart) > 0.001 || Math.abs(next.end - fromEnd) > 0.001;
+				if (moved) void tl.applyClipEdit(clip.id, next.start, next.end);
+			};
+
+			window.addEventListener("pointermove", move);
+			window.addEventListener("pointerup", end, { once: true });
+		},
+		[pxPerSec, tl],
+	);
+
+	/** The keyboard half of the same edit. These grips are focusable buttons, and a
+	 *  button that only answers a pointer is worse than no button — it takes a tab
+	 *  stop and then does nothing with it. Shift for a coarse second, otherwise a
+	 *  tenth, which is the precision the duration readouts are printed at. */
+	const nudgeEdge = useCallback(
+		(clip: AxcutClip, edge: "start" | "end", stepSec: number) => {
+			const fromStart = clip.sourceStartSec;
+			const fromEnd = clip.sourceEndSec ?? 0;
+			const asset = tl.assets.find((a) => a.id === clip.assetId);
+			const sourceDurationSec = Math.max(asset?.durationSec ?? 0, fromEnd, 0.001);
+			const next =
+				edge === "start"
+					? {
+							start: Math.min(Math.max(fromStart + stepSec, 0), fromEnd - MIN_CLIP_SEC),
+							end: fromEnd,
+						}
+					: {
+							start: fromStart,
+							end: Math.max(
+								Math.min(fromEnd + stepSec, sourceDurationSec),
+								fromStart + MIN_CLIP_SEC,
+							),
+						};
+			// Already against the stop: no document write, so holding the key down at
+			// the end of the source does not pile identical steps onto the undo stack.
+			if (Math.abs(next.start - fromStart) < 0.001 && Math.abs(next.end - fromEnd) < 0.001) return;
+			void tl.applyClipEdit(clip.id, next.start, next.end);
+		},
+		[tl],
+	);
+
+	/** Where the trimmed clip sits, so the clips after it know to slide with it. */
+	const edgeTrimIndex = edgeTrim ? clips.findIndex((c) => c.id === edgeTrim.id) : -1;
+
 	const startClipDrag = useCallback(
 		(e: ReactPointerEvent, clip: AxcutClip) => {
 			if (e.button !== 0) return;
@@ -2178,7 +2304,13 @@ export function V4Timeline({
 								// them, so they belong to its box rather than between boxes.
 								const boxStart = c.timelineStartSec;
 								const boxEnd = c.timelineEndSec;
-								const boxLen = boxEnd - boxStart;
+								// A live edge trim previews as a ripple: the clip being trimmed
+								// absorbs the whole change in its own length, and everything after
+								// it slides by that much. Its own left edge never moves, because
+								// the commit relays the row back-to-back from zero and will put it
+								// back exactly where it is now.
+								const trimming = edgeTrim?.id === c.id;
+								const boxLen = boxEnd - boxStart + (trimming ? edgeTrim.deltaSec : 0);
 								const asset = tl.assets.find((a) => a.id === c.assetId);
 								const clipVideoUrl = videoSources.find((v) => v.id === c.assetId)?.src;
 								const selected = tl.clipSelection === c.id;
@@ -2189,7 +2321,10 @@ export function V4Timeline({
 								// follows the pointer directly (see .tlClipDragging's
 								// transition:none override).
 								let clipTransform: string | undefined;
-								if (dragging) {
+								const rippling = Boolean(edgeTrim) && edgeTrimIndex >= 0 && i > edgeTrimIndex;
+								if (rippling && edgeTrim) {
+									clipTransform = `translateX(${edgeTrim.deltaSec * pxPerSec}px)`;
+								} else if (dragging) {
 									clipTransform = `translateX(${clipDrag.pointerDeltaX}px)`;
 								} else if (clipDrag) {
 									const { from, target, shiftPx } = clipDrag;
@@ -2216,7 +2351,7 @@ export function V4Timeline({
 											isGeneratedAssetId(c.assetId) ? ` ${styles.tlClipGenerated}` : ""
 										}${selected ? ` ${styles.tlClipSel}` : ""}${
 											dragging ? ` ${styles.tlClipDragging}` : ""
-										}`}
+										}${rippling ? ` ${styles.tlClipRippling}` : ""}`}
 										style={{
 											left: `${pctOf(boxStart)}%`,
 											// Minus the gutter that separates two cards (it used to be the
@@ -2250,6 +2385,58 @@ export function V4Timeline({
 											sourceEndSec={c.sourceEndSec ?? c.sourceStartSec + dur}
 											gain={audioGainScalar(settings.audioGainDb)}
 										/>
+										{/* Only on a card wide enough to hold them. Below that the two grips
+										    would cover the whole clip and leave no body to grab for a reorder —
+										    the pencil (and the Edit modal behind it) stays the way in at that
+										    size, the same bargain the other in-clip controls strike. */}
+										{narrow ? null : (
+											<>
+												<button
+													type="button"
+													data-no-clip-drag
+													className={styles.tlClipEdge}
+													data-edge="start"
+													aria-label={te("editClipDialog.adjustStart")}
+													title={te("editClipDialog.adjustStart")}
+													onPointerDown={(e) => startEdgeTrim(e, c, "start")}
+													onKeyDown={(e) => {
+														if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+														e.preventDefault();
+														e.stopPropagation();
+														nudgeEdge(
+															c,
+															"start",
+															(e.shiftKey ? 1 : 0.1) * (e.key === "ArrowLeft" ? -1 : 1),
+														);
+													}}
+													// The card's own onClick selects the clip; a grip that let the
+													// click through would reselect on the end of every trim.
+													onClick={(e) => e.stopPropagation()}
+													onDoubleClick={(e) => e.stopPropagation()}
+												/>
+												<button
+													type="button"
+													data-no-clip-drag
+													className={styles.tlClipEdge}
+													data-edge="end"
+													aria-label={te("editClipDialog.adjustEnd")}
+													title={te("editClipDialog.adjustEnd")}
+													onPointerDown={(e) => startEdgeTrim(e, c, "end")}
+													onKeyDown={(e) => {
+														if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+														e.preventDefault();
+														e.stopPropagation();
+														nudgeEdge(
+															c,
+															"end",
+															(e.shiftKey ? 1 : 0.1) * (e.key === "ArrowLeft" ? -1 : 1),
+														);
+													}}
+													onClick={(e) => e.stopPropagation()}
+													onDoubleClick={(e) => e.stopPropagation()}
+												/>
+											</>
+										)}
 										<div className={styles.tlClipLabel}>
 											<span
 												className={styles.tlClipIcon}

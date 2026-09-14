@@ -119,6 +119,9 @@ function renderTimeline(
 		addZoom: vi.fn(async () => {
 			/* the toolbar only awaits it */
 		}),
+		applyClipEdit: vi.fn(async () => {
+			/* the edge trim only awaits it */
+		}),
 	};
 	const setCurrentTime = vi.fn();
 	const timeline = (
@@ -777,5 +780,104 @@ describe("V4Timeline audio lane drag", () => {
 		// The head is pinned; only the tail comes in, so the span gets shorter.
 		expect(placement.startMs).toBe(100_000);
 		expect(placement.endMs - placement.startMs).toBeLessThan(60_000);
+	});
+});
+
+// Trimming a clip by dragging its own edge in the row, rather than opening the
+// Edit modal to move the same two numbers. The document work is shared with that
+// modal (applyClipEdit → setClipSourceRange); what is new here is turning pointer
+// travel into a source range, and refusing the ranges that are not edits.
+//
+// The arithmetic below rests on pxPerSec: VIEWPORT_PX / total. With the default
+// 1800s timeline that is 0.5px per second, so 1px of travel is 2 seconds.
+describe("V4Timeline clip edge trim", () => {
+	const gripsOf = (clipEl: Element) =>
+		Array.from(clipEl.querySelectorAll<HTMLElement>("[data-edge]"));
+	const gripFor = (clipEl: Element, edge: "start" | "end") =>
+		clipEl.querySelector<HTMLElement>(`[data-edge="${edge}"]`) as HTMLElement;
+
+	it("takes the tail in when the end grip is dragged left", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "end"), -100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+	});
+
+	it("takes the head in when the start grip is dragged right", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "start"), 100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 200, 1800);
+	});
+
+	// The clip is 900s of an 1800s file, so there is real footage to give back.
+	it("lets the tail back out into footage the file still has", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900)]);
+		// One clip spanning the timeline: pxPerSec is 1 here, not 0.5.
+		dragHandle(gripFor(clipEls[0], "end"), 100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1000);
+	});
+
+	// The asset is 1800s and the clip already ends there, so there is nothing to
+	// give back. Inventing footage past the end of the file is the failure this
+	// clamp exists to prevent.
+	it("refuses to pull the tail past the end of the file", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "end"), 400);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	it("refuses to push the head before the start of the file", () => {
+		const { clipEls, tl } = renderTimeline();
+		dragHandle(gripFor(clipEls[0], "start"), -400);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// Dragged clean through its own start: the clip stops at the floor rather than
+	// inverting, which would hand setClipSourceRange a backwards range.
+	it("stops at the minimum length instead of turning the clip inside out", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900)]);
+		dragHandle(gripFor(clipEls[0], "end"), -2000);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 0.05);
+	});
+
+	// A grip is a plausible thing to click by accident on the way to selecting a
+	// clip, and an empty step on the undo stack is the tell that it happened.
+	it("writes nothing for a press that never moved", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0 });
+		window.dispatchEvent(new MouseEvent("pointerup", { clientX: 0 }));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// Two grips on a clip a few pixels wide would cover it entirely and leave no
+	// body to grab for a reorder. The pencil stays the way in at that size.
+	it("keeps its grips off a clip too narrow to hold them", () => {
+		const { clipEls } = renderTimeline([clip(0, 1790), clip(1790, 1800)]);
+		expect(gripsOf(clipEls[0])).toHaveLength(2);
+		expect(gripsOf(clipEls[1])).toHaveLength(0);
+	});
+
+	// The grips are focusable buttons, so they owe the keyboard an answer.
+	it("nudges by a tenth with an arrow, and by a second with shift", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+		fireEvent.keyDown(grip, { key: "ArrowLeft", shiftKey: true });
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799);
+	});
+
+	// The grip sits inside the card, whose own pointerdown starts a reorder and
+	// whose click selects. Only one gesture can own the press.
+	it("does not let a trim double as a selection", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900), clip(900, 1800)]);
+		const grip = gripFor(clipEls[0], "end");
+		dragHandle(grip, -50);
+		// dragHandle stops at pointerup, but a real pointer sequence ends in a click
+		// that bubbles to the card, whose handler selects. Dispatching it is the only
+		// way this asserts anything: without it the test passes even with the grip's
+		// stopPropagation deleted.
+		fireEvent.click(grip);
+		expect(tl.selectClip).not.toHaveBeenCalled();
 	});
 });
