@@ -1173,11 +1173,17 @@
 .recCancelBtn:hover {
 	background: var(--surface-2);
 }
+/* --bg, the same ground the left dock and the shell itself stand on, so the two
+   menus this toolbar opens belong to the same surface family as the rest of the
+   chrome. They were --surface-1, which is a step off it in light and a long way
+   off it in dark (#14181f against #0a0d12). Nothing is lost by going flush: the
+   border and --elev-pop are what make these read as a floating layer, and both
+   carry against --bg in either theme. */
 .recMenu {
 	position: absolute;
 	bottom: 46px;
 	min-width: 210px;
-	background: var(--surface-1);
+	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 12px;
 	box-shadow: var(--elev-pop);
