@@ -759,11 +759,17 @@
 .transport .tbtn.play:hover {
 	background: var(--fg-2);
 }
+/* The UI face with tabular figures, not a monospace one — the same treatment
+   .tlDragTip and the HUD's recording timer already use. Monospace was doing one
+   job here, keeping the readout from twitching as digits change during playback,
+   and tabular-nums does that job without dressing a timecode up as source code.
+   No letter-spacing: that was loosening a mono face; a proportional one is
+   already spaced. min-width still carries the rest, since the string itself
+   grows a character at 10 minutes. */
 .transport .time {
-	font-family: var(--font-mono);
 	font-size: var(--fs-app-sm);
+	font-variant-numeric: tabular-nums;
 	color: var(--fg);
-	letter-spacing: 0.02em;
 	min-width: 96px;
 	text-align: center;
 	flex-shrink: 0;

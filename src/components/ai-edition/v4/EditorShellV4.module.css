@@ -806,13 +806,16 @@
 	justify-content: space-between;
 	gap: 8px;
 }
+/* The size travels with the duration here — they are one row of figures, and
+   leaving one monospace beside a proportional one is more conspicuous than
+   either choice on its own. */
 .mediaCardStats .dur {
-	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 	font-size: 10.5px;
 	color: var(--muted);
 }
 .mediaCardStats .size {
-	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 	font-size: 10.5px;
 	color: var(--muted);
 }
@@ -1604,7 +1607,7 @@
 	top: 12px;
 	left: 50%;
 	transform: translateX(-50%);
-	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 	font-size: 10px;
 	color: var(--meta);
 	white-space: nowrap;
@@ -1653,6 +1656,9 @@
 	color: var(--fg);
 	font-size: 11px;
 	font-weight: 600;
+	/* A trim pill's label IS a duration, so its digits hold still while the pill
+	   is dragged — and it keeps the "Zoom 1"/"Zoom 2" numerals aligned too. */
+	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 	overflow: hidden;
 	box-sizing: border-box;
@@ -1982,7 +1988,8 @@
 	text-overflow: ellipsis;
 }
 .tlClipDuration {
-	font: 500 10px/1.2 var(--font-mono);
+	font: 500 10px/1.2 var(--font-body);
+	font-variant-numeric: tabular-nums;
 	color: rgba(255, 255, 255, 0.7);
 	white-space: nowrap;
 	flex-shrink: 0;

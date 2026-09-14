@@ -1132,7 +1132,8 @@ export function EditClipModal({
 					style={{
 						display: "flex",
 						justifyContent: "space-between",
-						font: "500 10px/1.4 var(--font-mono)",
+						font: "500 10px/1.4 var(--font-body)",
+						fontVariantNumeric: "tabular-nums",
 						color: "var(--muted)",
 						marginBottom: 4,
 					}}
@@ -1362,7 +1363,15 @@ export function EditClipModal({
 function RangeStat({ label, value, testId }: { label: string; value: string; testId?: string }) {
 	return (
 		<div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-			<strong style={{ font: "600 15px/1.2 var(--font-mono)", color: "var(--fg)" }}>{value}</strong>
+			<strong
+				style={{
+					font: "600 15px/1.2 var(--font-body)",
+					fontVariantNumeric: "tabular-nums",
+					color: "var(--fg)",
+				}}
+			>
+				{value}
+			</strong>
 			<small style={{ font: "500 10px/1.4 var(--font-body)", color: "var(--muted)" }}>
 				{label}
 			</small>
