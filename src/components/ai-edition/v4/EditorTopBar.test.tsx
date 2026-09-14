@@ -19,7 +19,7 @@ import { EditorTopBar } from "./EditorTopBar";
 
 const noop = () => {};
 
-function renderTopBar(projectTitle: string | null) {
+function renderTopBar(projectTitle: string | null, dirty = false) {
 	const onRename = vi.fn();
 	const onShowAbout = vi.fn();
 	const onCheckForUpdates = vi.fn();
@@ -30,7 +30,7 @@ function renderTopBar(projectTitle: string | null) {
 			mode="edit"
 			onModeChange={noop}
 			projectTitle={projectTitle}
-			dirty={false}
+			dirty={dirty}
 			canExport={false}
 			chatOpen={false}
 			actions={{
@@ -255,11 +255,44 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		expect(tabs[2]).toHaveAttribute("title", "topbar.modes.rec");
 	});
 
-	it("provides title tooltips on the saved status indicator", () => {
+	// The "Saved"/"Unsaved" badge is gone: unsaved work is marked on the document
+	// name instead. What has to survive that is the announcement -- the marker
+	// itself is decoration, and the rename button's aria-label swallows anything
+	// nested inside it, so a silent dot would drop the state out of the a11y tree
+	// altogether.
+	it("says nothing about saving while the document is clean", () => {
 		renderTopBar("Demo Project");
-		const savedIndicator = screen.getByTitle("topbar.saved");
-		expect(savedIndicator).toBeInTheDocument();
-		expect(savedIndicator).toHaveTextContent("topbar.saved");
+		expect(screen.queryByText("topbar.unsaved")).not.toBeInTheDocument();
+		expect(screen.queryByText("topbar.saved")).not.toBeInTheDocument();
+	});
+
+	it("announces the unsaved state once the document is modified", () => {
+		renderTopBar("Demo Project", true);
+		expect(screen.getByText("topbar.unsaved")).toBeInTheDocument();
+	});
+
+	// A project-less bar reads "No project", which an unsaved marker beside it
+	// would contradict.
+	it("keeps the unsaved marker off a bar with no project", () => {
+		renderTopBar(null, true);
+		expect(screen.queryByText("topbar.unsaved")).not.toBeInTheDocument();
+	});
+
+	it("names every mode tab independently of the width its label is painted at", () => {
+		renderTopBar("Demo Project");
+		const tabs = screen.getAllByRole("tab");
+		expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual([
+			"topbar.modes.media",
+			"topbar.modes.edit",
+			"topbar.modes.rec",
+		]);
+		// Each tab carries exactly one glyph, which is decorative: the name above
+		// is what a screen reader reads.
+		for (const tab of tabs) {
+			const icons = tab.querySelectorAll("svg");
+			expect(icons).toHaveLength(1);
+			expect(icons[0]).toHaveAttribute("aria-hidden");
+		}
 	});
 
 	it("keeps the brand trigger accessible by label and title even when text collapses", () => {

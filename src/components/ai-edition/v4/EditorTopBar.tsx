@@ -1,15 +1,19 @@
 import {
 	ChevronDown,
 	Download,
+	Film,
 	FolderOpen,
 	FolderPlus,
 	Info,
 	Keyboard,
 	Languages,
+	type LucideIcon,
+	MonitorSmartphone,
 	Moon,
 	PanelLeft,
 	RefreshCw,
 	Save,
+	Scissors,
 	Sparkles,
 	Sun,
 } from "lucide-react";
@@ -45,10 +49,14 @@ interface EditorTopBarProps {
 	actions: TopBarActions;
 }
 
-const MODES: Array<{ id: EditorMode; labelKey: string }> = [
-	{ id: "media", labelKey: "topbar.modes.media" },
-	{ id: "edit", labelKey: "topbar.modes.edit" },
-	{ id: "rec", labelKey: "topbar.modes.rec" },
+/* No tab invents a glyph: each wears the one its own stage already uses, so the
+   tab and the screen it opens name the same thing. Film is what MediaStage
+   stamps on every asset card, Scissors is V4Timeline's, and MonitorSmartphone is
+   the source picker RecStage opens with. */
+const MODES: Array<{ id: EditorMode; labelKey: string; Icon: LucideIcon }> = [
+	{ id: "media", labelKey: "topbar.modes.media", Icon: Film },
+	{ id: "edit", labelKey: "topbar.modes.edit", Icon: Scissors },
+	{ id: "rec", labelKey: "topbar.modes.rec", Icon: MonitorSmartphone },
 ];
 
 export function EditorTopBar({
@@ -90,7 +98,7 @@ export function EditorTopBar({
 			</span>
 			<AppMenu actions={actions} />
 			<span className={styles.sep} aria-hidden />
-			<ProjectNameField title={projectTitle} onRename={actions.renameProject} />
+			<ProjectNameField title={projectTitle} dirty={dirty} onRename={actions.renameProject} />
 			<span className={styles.sep} aria-hidden />
 			<button
 				type="button"
@@ -135,39 +143,26 @@ export function EditorTopBar({
 				) : null}
 			</button>
 			<span className={styles.sep} aria-hidden />
-			{/* Both states are always rendered, stacked in one grid cell, so the slot
-			    keeps the width of the longer label and the bar doesn't twitch every
-			    time the document goes dirty. The inactive one is visibility:hidden,
-			    which also takes it out of the accessibility tree. */}
-			<span className={styles.saved} title={dirty ? t("topbar.unsaved") : t("topbar.saved")}>
-				<span className={styles.savedState} data-on={!dirty}>
-					<span className={styles.dot} aria-hidden />
-					<span className={styles.savedLabel}>{t("topbar.saved")}</span>
-				</span>
-				<span className={styles.savedState} data-on={dirty}>
-					<span
-						className={styles.dot}
-						aria-hidden
-						style={{ background: "var(--warn)", boxShadow: "0 0 0 3px var(--warn-soft)" }}
-					/>
-					<span className={styles.savedLabel}>{t("topbar.unsaved")}</span>
-				</span>
-			</span>
 
 			<div className={styles.modeSwitch} role="tablist" aria-label={t("topbar.editorMode")}>
-				{MODES.map((m) => (
+				{MODES.map(({ id, labelKey, Icon }) => (
 					<button
-						key={m.id}
+						key={id}
 						type="button"
 						role="tab"
-						aria-selected={mode === m.id}
-						title={t(m.labelKey)}
+						aria-selected={mode === id}
+						title={t(labelKey)}
+						// Under 960px the label is hidden and the tab is its glyph alone, so the
+						// name is spelled out here rather than left to fall back to `title` —
+						// what a tab is called must not depend on the window width.
+						aria-label={t(labelKey)}
 						// Feeds the hidden bold copy that reserves the selected width — see
 						// .modeSwitch button::before.
-						data-label={t(m.labelKey)}
-						onClick={() => onModeChange(m.id)}
+						data-label={t(labelKey)}
+						onClick={() => onModeChange(id)}
 					>
-						<span className={styles.modeLabel}>{t(m.labelKey)}</span>
+						<Icon size={13} className={styles.modeIcon} aria-hidden />
+						<span className={styles.modeLabel}>{t(labelKey)}</span>
 					</button>
 				))}
 			</div>
@@ -203,9 +198,11 @@ export function EditorTopBar({
 
 function ProjectNameField({
 	title,
+	dirty,
 	onRename,
 }: {
 	title: string | null;
+	dirty: boolean;
 	onRename: (title: string) => void;
 }) {
 	const t = useScopedT("editor");
@@ -244,19 +241,30 @@ function ProjectNameField({
 		);
 	}
 
+	// No project, nothing to be unsaved — and the button reads "No project" there,
+	// which a marker beside it would contradict.
+	const modified = dirty && title !== null;
+
 	return (
-		<button
-			type="button"
-			className={`${styles.ghostBtn} ${styles.projectNameBtn}`}
-			aria-label={t("topbar.renameProject")}
-			// The label is truncated to keep the slot fixed, so the full name has to
-			// stay reachable on hover.
-			title={title ?? undefined}
-			disabled={!title}
-			onClick={startEditing}
-		>
-			<span className={styles.projectNameLabel}>{title ?? t("topbar.noProject")}</span>
-		</button>
+		<>
+			<button
+				type="button"
+				className={`${styles.ghostBtn} ${styles.projectNameBtn}`}
+				aria-label={t("topbar.renameProject")}
+				// The label is truncated to keep the slot fixed, so the full name has to
+				// stay reachable on hover.
+				title={title ?? undefined}
+				disabled={!title}
+				onClick={startEditing}
+			>
+				<span className={styles.projectNameLabel}>{title ?? t("topbar.noProject")}</span>
+				<span className={styles.projectDirtyDot} data-on={modified} aria-hidden />
+			</button>
+			{/* The marker above is decoration to a screen reader, and the button's
+			    aria-label swallows anything nested in it, so the state is spelled out
+			    here instead — the one piece of the old status badge worth keeping. */}
+			{modified ? <span className="sr-only">{t("topbar.unsaved")}</span> : null}
+		</>
 	);
 }
 

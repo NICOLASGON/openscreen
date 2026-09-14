@@ -267,39 +267,27 @@
 	font: 500 13px var(--font-display);
 	outline: none;
 }
-/* Both states are rendered into the SAME grid cell, so the slot is as wide as
-   the longer of the two and never resizes when the document goes dirty — which
-   happens on every keystroke. Sizing to the longer string beats guessing a width:
-   "Saved"/"Unsaved" differ by 2 characters in English and by 4 in French, and a
-   hard-coded width would clip somewhere among the 13 locales. */
-.saved {
-	display: inline-grid;
-	grid-template-areas: "state";
-	align-items: center;
-	justify-items: start;
-	font-family: var(--font-mono);
-	font-size: 11px;
-	color: var(--muted);
-	flex-shrink: 0;
-}
-.savedState {
-	grid-area: state;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	white-space: nowrap;
-}
-/* visibility (not display) so the hidden state still contributes its width —
-   and stays out of the accessibility tree. */
-.savedState[data-on="false"] {
-	visibility: hidden;
-}
-.saved .dot {
-	width: 6px;
-	height: 6px;
+/* Unsaved work is marked on the document name, the way a native editor marks a
+   modified file, rather than by a status badge elsewhere in the bar: the state
+   belongs to the thing that is modified, and a badge reading "Saved" 95% of the
+   time is decoration, not information. Deliberately --muted and not --warn: the
+   Save button's own dot is the warning (that button has something to do), this
+   one only says which document it is about.
+
+   visibility, not display, and the slot is always reserved: `dirty` flips on the
+   first keystroke, and a marker that appeared would resize the name under the
+   pointer the moment someone starts typing. */
+.projectDirtyDot {
+	width: 5px;
+	height: 5px;
 	border-radius: 50%;
-	background: var(--accent);
-	box-shadow: 0 0 0 3px var(--accent-soft);
+	background: var(--muted);
+	flex-shrink: 0;
+	/* Against .ghostBtn's 7px gap, to sit with the name rather than beside it. */
+	margin-left: -2px;
+}
+.projectDirtyDot[data-on="false"] {
+	visibility: hidden;
 }
 
 .langAnchor {
@@ -401,15 +389,22 @@
 	   widest column and shift the whole control. Reserving the bold width up front
 	   makes each button the same size selected, hovered or idle. */
 	display: grid;
-	grid-template-areas: "label";
-	/* minmax(0,…) so the cell can be narrower than the text: without it the inner
-	   column sizes to the label and the button just clips it mid-glyph, instead of
-	   letting the label ellipsise. */
-	grid-template-columns: minmax(0, 1fr);
+	grid-template-areas: "icon label";
+	/* Both columns size to content and the pair is centred as a unit, rather than
+	   the label column absorbing the slack and pushing the glyph off to the left.
+	   minmax(0,…) on the label so its cell can be narrower than the text: without
+	   it the column sizes to the label and the button clips it mid-glyph instead
+	   of letting it ellipsise. */
+	grid-template-columns: auto minmax(0, auto);
+	justify-content: center;
+	column-gap: 6px;
 	place-items: center;
 	min-width: 0;
 	max-width: 140px;
 	overflow: hidden;
+}
+.modeIcon {
+	grid-area: icon;
 }
 .modeSwitch button::before {
 	content: attr(data-label);
@@ -497,7 +492,7 @@
 	.modeSwitch button {
 		padding: 4px 8px;
 		font-size: 11px;
-		max-width: 90px;
+		max-width: 112px;
 	}
 	.exportBtn {
 		padding: 0 10px;
@@ -522,14 +517,19 @@
 		width: var(--topbar-icon);
 		gap: 0;
 	}
-	.savedLabel {
+	/* Below this the three labels ellipsise into stumps ("Enregistr…"), so the
+	   tabs drop to their glyphs instead. Each button keeps its aria-label and
+	   title, so the trio is still named -- just not painted. */
+	.modeLabel,
+	.modeSwitch button::before {
 		display: none;
 	}
-	.saved {
-		width: auto;
-	}
-	.savedState {
-		gap: 0;
+	.modeSwitch button {
+		grid-template-areas: "icon";
+		grid-template-columns: auto;
+		column-gap: 0;
+		padding: 5px 9px;
+		max-width: none;
 	}
 	.langIcon {
 		display: none;
@@ -546,9 +546,7 @@
 		--topbar-project-w: 70px;
 	}
 	.modeSwitch button {
-		padding: 3px 6px;
-		font-size: 10.5px;
-		max-width: 70px;
+		padding: 5px 7px;
 	}
 	.exportLabel {
 		display: none;
