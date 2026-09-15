@@ -71,7 +71,19 @@ afterEach(() => {
 	measureText.mockImplementation((text: string) => ({ width: text.length * 6 }));
 });
 
-function clip(startSec: number, endSec: number) {
+/** `sourceEndSec` is OPTIONAL here because it is optional in the schema: a clip whose
+ *  asset was never probed carries none, and the trim has to cope with that. Spelling the
+ *  return type out is what lets a fixture leave it off. */
+type TestClip = {
+	id: string;
+	assetId: string;
+	timelineStartSec: number;
+	timelineEndSec: number;
+	sourceStartSec: number;
+	sourceEndSec?: number;
+};
+
+function clip(startSec: number, endSec: number): TestClip {
 	return {
 		id: `c@${startSec}`,
 		assetId: "a1",
@@ -92,6 +104,9 @@ function renderTimeline(
 	annotation = { id: "ann1", startMs: 10_000, endMs: 11_000 },
 	assets: Array<Record<string, unknown>> = [NO_CAMERA_ASSET],
 	onRender?: ProfilerOnRenderCallback,
+	/** Overrides for the props the shell owns. Only the write callback needs it so far:
+	 *  a test that wants to see WHERE the commit goes has to be handed its own spy. */
+	overrides: { onApplyClipEdit?: (id: string, s: number, e: number) => void } = {},
 ) {
 	const tl = {
 		clips,
@@ -119,7 +134,7 @@ function renderTimeline(
 		addZoom: vi.fn(async () => {
 			/* the toolbar only awaits it */
 		}),
-		applyClipEdit: vi.fn(async () => {
+		applyClipEdit: vi.fn(async (_clipId: string, _startSec: number, _endSec: number) => {
 			/* the edge trim only awaits it */
 		}),
 	};
@@ -136,6 +151,11 @@ function renderTimeline(
 				onPrevClip={vi.fn()}
 				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
+				// The shell wraps this in its write queue; here it goes straight to the mock,
+				// so the assertions below read the range the component asked to commit.
+				onApplyClipEdit={
+					overrides.onApplyClipEdit ?? ((clipId, s, e) => void tl.applyClipEdit(clipId, s, e))
+				}
 				onAddVoiceover={vi.fn()}
 			/>
 		</ShortcutsProvider>
@@ -624,6 +644,7 @@ describe("V4Timeline audio lane drag", () => {
 					onPrevClip={vi.fn()}
 					onNextClip={vi.fn()}
 					onEditClip={vi.fn()}
+					onApplyClipEdit={vi.fn()}
 					onAddVoiceover={props.onAddVoiceover ?? vi.fn()}
 				/>
 			</ShortcutsProvider>,
@@ -954,8 +975,7 @@ describe("V4Timeline clip edge trim", () => {
 	// precisely because this is printed to a tenth.
 	it("counts the duration down as the clip is dragged shorter", () => {
 		const { clipEls, tl } = renderTimeline([clip(0, 900)]);
-		const durationOf = () =>
-			document.querySelector('[class*="tlClipDuration"]')?.textContent;
+		const durationOf = () => document.querySelector('[class*="tlClipDuration"]')?.textContent;
 		expect(durationOf()).toBe("15:00.0");
 
 		// `act` because these go straight to `window`, unlike fireEvent: the preview is
@@ -1008,6 +1028,25 @@ describe("V4Timeline clip edge trim", () => {
 		// The drag is off: its release does not put the pre-nudge range back.
 		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
 		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+	});
+
+	// The commit goes through the prop, which the shell has wrapped in the one queue every
+	// document write shares. Calling `tl.applyClipEdit` here instead would read the document
+	// at call time and save it back, so two writes in flight would both build on the same
+	// pre-trim document -- a held arrow key repeats about thirty times a second, which is
+	// exactly how you get two.
+	it("commits through the shell's write callback, not straight at the timeline api", () => {
+		const onApplyClipEdit = vi.fn();
+		const { clipEls, tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+			onApplyClipEdit,
+		});
+		dragHandle(gripFor(clipEls[0], "end"), -100);
+		expect(onApplyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		fireEvent.keyDown(gripFor(clipEls[0], "end"), { key: "ArrowLeft" });
+		expect(onApplyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 	});
 
 	// A gesture that ignores foreign pointers is also a gesture that no longer ends when

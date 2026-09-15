@@ -587,6 +587,7 @@ export function V4Timeline({
 	onPrevClip,
 	onNextClip,
 	onEditClip,
+	onApplyClipEdit,
 	onAddVoiceover,
 }: {
 	tl: TimelineApi;
@@ -604,6 +605,14 @@ export function V4Timeline({
 	/** Opens the voiceover recorder. Shell-level like the clip editor: the
 	 *  dialog owns the microphone and the shell owns the transport. */
 	onAddVoiceover: () => void;
+	/** Commits an edge trim. NOT `tl.applyClipEdit` directly: that reads the document at
+	 *  call time and saves it back, so two calls in flight both build on the same pre-trim
+	 *  document and the second clobbers the first. A drag commits once, but the keyboard
+	 *  nudge fires per keydown and a held arrow repeats about thirty times a second. The
+	 *  shell owns the one queue every document write shares (`useSequentialTimelineOps`),
+	 *  and hands it down already wrapped — the Edit modal's own call site has always gone
+	 *  through it. */
+	onApplyClipEdit: (clipId: string, sourceStartSec: number, sourceEndSec: number) => void;
 }) {
 	const t = useScopedT("timeline");
 	// The live bindings, not the defaults: these keys are remappable, and a menu
@@ -1530,7 +1539,7 @@ export function V4Timeline({
 				// empty step on the undo stack.
 				const moved =
 					Math.abs(next.start - fromStart) > 0.001 || Math.abs(next.end - fromEnd) > 0.001;
-				if (moved) void tl.applyClipEdit(clip.id, next.start, next.end);
+				if (moved) onApplyClipEdit(clip.id, next.start, next.end);
 			};
 
 			// The browser takes the pointer away on a palm rejection, a system gesture, or
@@ -1557,7 +1566,7 @@ export function V4Timeline({
 			window.addEventListener("pointerup", end);
 			window.addEventListener("pointercancel", cancel);
 		},
-		[pxPerSec, tl],
+		[pxPerSec, tl, onApplyClipEdit],
 	);
 
 	/** The keyboard half of the same edit. These grips are focusable buttons, and a
@@ -1591,9 +1600,9 @@ export function V4Timeline({
 			// Already against the stop: no document write, so holding the key down at
 			// the end of the source does not pile identical steps onto the undo stack.
 			if (Math.abs(next.start - fromStart) < 0.001 && Math.abs(next.end - fromEnd) < 0.001) return;
-			void tl.applyClipEdit(clip.id, next.start, next.end);
+			onApplyClipEdit(clip.id, next.start, next.end);
 		},
-		[tl],
+		[tl, onApplyClipEdit],
 	);
 
 	/** Where the trimmed clip sits, so the clips after it know to slide with it. */
