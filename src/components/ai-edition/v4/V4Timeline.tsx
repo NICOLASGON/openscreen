@@ -1462,6 +1462,13 @@ export function V4Timeline({
 			// reorder. Only one of the two gestures can own this press.
 			e.preventDefault();
 			e.stopPropagation();
+			// One trim at a time. Now that a gesture ignores pointers other than its own,
+			// a second grip pressed before the first is released would otherwise run a
+			// second, independent drag: two of them fighting over the single `edgeTrim`
+			// preview, both committing on release, and only the newer one reachable
+			// through the ref the unmount effect cancels. The older press is abandoned,
+			// not committed — the user moved on to another edge.
+			abortEdgeTrimRef.current?.();
 
 			const fromStart = clip.sourceStartSec;
 			const fromEnd = clipOutPointSec(clip);

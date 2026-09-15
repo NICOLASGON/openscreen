@@ -949,6 +949,40 @@ describe("V4Timeline clip edge trim", () => {
 		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
 	});
 
+	// A gesture that ignores foreign pointers is also a gesture that no longer ends when
+	// another grip is pressed. Two live drags would fight over the single preview and both
+	// commit on release, with only the newer one reachable through the ref the unmount
+	// effect cancels — so the older press is abandoned the moment the next one starts.
+	it("abandons a trim still in flight when another grip is pressed", () => {
+		const { clipEls, tl } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+
+		fireEvent.pointerDown(gripFor(clipEls[0], "start"), { clientX: 0, pointerId: 2 });
+		// The first press is no longer anybody's: its release writes nothing.
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		// The second is the live one, and it commits its own edge alone.
+		window.dispatchEvent(pointerEvent("pointermove", 100, 2));
+		window.dispatchEvent(pointerEvent("pointerup", 100, 2));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 200, 1800);
+	});
+
+	it("drops every trim in flight when the timeline unmounts, not just the newest", () => {
+		const { clipEls, tl, unmount } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		fireEvent.pointerDown(gripFor(clipEls[0], "start"), { clientX: 0, pointerId: 2 });
+		window.dispatchEvent(pointerEvent("pointermove", 100, 2));
+
+		unmount();
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		window.dispatchEvent(pointerEvent("pointerup", 100, 2));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
 	// The shell renders the timeline conditionally, so it can go away under a drag that
 	// is still holding its `window` listeners. Those closures survive the unmount, and
 	// the next release would otherwise write a trim through a hook the user has already
