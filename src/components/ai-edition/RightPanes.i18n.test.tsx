@@ -37,12 +37,12 @@ describe("right-rail panes are localized", () => {
 		expect(screen.getByRole("button", { name: "Aide" })).toBeInTheDocument();
 	});
 
-	it("renders the floating background picker in French once it is opened", () => {
-		// The picker collapsed into a popover so the frame sliders stay above the fold, so
-		// its strings are only in the DOM after the trigger is clicked — the assertion has
-		// to open it, or it would pass on an empty document forever.
+	it("renders the inline background picker in French", () => {
+		// The picker is in the pane, not behind a trigger: it went into a popover to keep
+		// the frame sliders above the fold, and came back out once its grid was given a
+		// height budget of its own to scroll inside. So its strings are in the DOM on
+		// render, with nothing to click first.
 		renderIn("fr", <VideoEffectsPane />);
-		fireEvent.click(screen.getByRole("button", { name: "Arrière-plan" }));
 		expect(screen.getByRole("button", { name: "Téléverser une image" })).toBeInTheDocument();
 		// wallpaper swatches interpolate their index through the catalog
 		expect(screen.getByRole("button", { name: "Fond 1" })).toBeInTheDocument();
