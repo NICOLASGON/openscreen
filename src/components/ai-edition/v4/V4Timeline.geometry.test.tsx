@@ -949,6 +949,32 @@ describe("V4Timeline clip edge trim", () => {
 		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
 	});
 
+	// The card resizes live under the drag; the duration printed inside it has to go
+	// with it. It is the precise half of the preview, and the keyboard step is a tenth
+	// precisely because this is printed to a tenth.
+	it("counts the duration down as the clip is dragged shorter", () => {
+		const { clipEls, tl } = renderTimeline([clip(0, 900)]);
+		const durationOf = () =>
+			document.querySelector('[class*="tlClipDuration"]')?.textContent;
+		expect(durationOf()).toBe("15:00.0");
+
+		// `act` because these go straight to `window`, unlike fireEvent: the preview is
+		// React state, and an unflushed render would read as the bug this guards.
+		// pxPerSec is 1 on a single clip spanning the timeline, so 100px is 100s.
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		act(() => {
+			window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		});
+		expect(durationOf()).toBe("13:20.0");
+
+		// And back to the committed value once the gesture is abandoned.
+		act(() => {
+			window.dispatchEvent(pointerEvent("pointercancel", -100, 1));
+		});
+		expect(durationOf()).toBe("15:00.0");
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
 	// Two grips per clip, all carrying the same label: "Adjust clip start" names one
 	// button per clip in the row and says nothing about which. The card's own name
 	// element is what tells them apart.

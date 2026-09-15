@@ -2367,7 +2367,6 @@ export function V4Timeline({
 							}}
 						>
 							{clips.map((c, i) => {
-								const dur = c.timelineEndSec - c.timelineStartSec;
 								// On the expanded ruler the box also carries whatever pauses fall
 								// inside it — the film really does stay on this clip's frame for
 								// them, so they belong to its box rather than between boxes.
@@ -2409,7 +2408,13 @@ export function V4Timeline({
 								const narrow = boxLen * pxPerSec < NARROW_CLIP_PX;
 								// The gutter is taken out of the card's own width below, so the
 								// room the label actually has is that much less than the span.
-								const durText = formatSec(dur);
+								// From `boxLen`, not the committed length: during a drag the card is
+								// already showing the trimmed size, and a readout still printing the
+								// old one contradicts the box it sits in. It is also the precise half
+								// of the preview — the keyboard step is a tenth BECAUSE this is
+								// printed to a tenth — so it is the number the user is aiming with.
+								// Identical to the committed length whenever no trim is in flight.
+								const durText = formatSec(boxLen);
 								return (
 									<div
 										key={c.id}
