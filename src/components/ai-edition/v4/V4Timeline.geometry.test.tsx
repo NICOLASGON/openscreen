@@ -949,6 +949,41 @@ describe("V4Timeline clip edge trim", () => {
 		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
 	});
 
+	// Two grips per clip, all carrying the same label: "Adjust clip start" names one
+	// button per clip in the row and says nothing about which. The card's own name
+	// element is what tells them apart.
+	it("tells the grips of one clip apart from another clip's", () => {
+		const { clipEls } = renderTimeline([clip(0, 900), clip(900, 1800)]);
+		const described = (el: Element, edge: "start" | "end") =>
+			gripFor(el, edge).getAttribute("aria-describedby");
+		// Each grip points at the name of the clip it belongs to, not at a shared node.
+		expect(described(clipEls[0], "start")).toBe(described(clipEls[0], "end"));
+		expect(described(clipEls[0], "start")).not.toBe(described(clipEls[1], "start"));
+		// And the target exists and carries the clip's name, or the reference is dead.
+		for (const el of clipEls) {
+			const target = document.getElementById(described(el, "start") as string);
+			expect(target?.textContent).toBe("rec");
+		}
+	});
+
+	// A grip keeps DOM focus through a drag on it, so an arrow key can land mid-drag. The
+	// drag's pending range came from a snapshot the nudge's write invalidates, so it must
+	// stop being pending rather than commit over the nudge when the pointer is released.
+	it("lets a keyboard nudge take over from a drag instead of being overwritten by it", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+
+		// The drag is off: its release does not put the pre-nudge range back.
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+	});
+
 	// A gesture that ignores foreign pointers is also a gesture that no longer ends when
 	// another grip is pressed. Two live drags would fight over the single preview and both
 	// commit on release, with only the newer one reachable through the ref the unmount

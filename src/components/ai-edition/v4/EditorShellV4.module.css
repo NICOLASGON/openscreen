@@ -1919,12 +1919,25 @@
 .tlClip:hover .tlClipEdge::after {
 	opacity: 0.3;
 }
-.tlClipEdge:hover::after,
-.tlClipEdge:focus-visible::after {
+.tlClipEdge:hover::after {
 	opacity: 0.75;
 }
+/* Keyboard focus is NOT the hover state. The shared ring the rest of the editor
+   uses sits at outline-offset 2px, which .tlClip's overflow:hidden would clip away
+   on a grip flush against the card edge — so the indicator is drawn inside the
+   grip instead: the accent colour rather than the neutral bar, full height, and
+   opaque. That is a change of hue, size and weight at once, none of which hover
+   does, which is what keeps the two states from reading alike. */
 .tlClipEdge:focus-visible {
 	outline: none;
+}
+.tlClipEdge:focus-visible::after {
+	opacity: 1;
+	height: 100%;
+	left: 2px;
+	right: 2px;
+	background: var(--accent);
+	box-shadow: var(--focus-ring);
 }
 /* The siblings a live trim pushes along have to track the pointer, not glide
    150ms behind it. .tlClip's transform transition is right for a reorder, where

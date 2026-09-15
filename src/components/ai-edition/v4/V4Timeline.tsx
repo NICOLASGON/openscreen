@@ -1566,6 +1566,11 @@ export function V4Timeline({
 	 *  tenth, which is the precision the duration readouts are printed at. */
 	const nudgeEdge = useCallback(
 		(clip: AxcutClip, edge: "start" | "end", stepSec: number) => {
+			// A grip keeps DOM focus through a drag on it (the pointerdown preventDefault
+			// leaves focus where it was), so an arrow key can land mid-drag. The drag's
+			// pending range was computed from a snapshot this write is about to invalidate,
+			// so it has to stop being pending rather than commit over the nudge on release.
+			abortEdgeTrimRef.current?.();
 			const fromStart = clip.sourceStartSec;
 			const fromEnd = clipOutPointSec(clip);
 			const asset = tl.assets.find((a) => a.id === clip.assetId);
@@ -2461,6 +2466,12 @@ export function V4Timeline({
 													className={styles.tlClipEdge}
 													data-edge="start"
 													aria-label={te("editClipDialog.adjustStart")}
+													// Every clip in the row carries a grip with this same label, so on its
+													// own it names two buttons per clip and tells a screen-reader user
+													// nothing about WHICH clip they are on. The card's own name element
+													// supplies that, rather than a new interpolated string to translate
+													// thirteen times.
+													aria-describedby={`tl-clip-name-${c.id}`}
 													title={te("editClipDialog.adjustStart")}
 													onPointerDown={(e) => startEdgeTrim(e, c, "start")}
 													onKeyDown={(e) => {
@@ -2484,6 +2495,7 @@ export function V4Timeline({
 													className={styles.tlClipEdge}
 													data-edge="end"
 													aria-label={te("editClipDialog.adjustEnd")}
+													aria-describedby={`tl-clip-name-${c.id}`}
 													title={te("editClipDialog.adjustEnd")}
 													onPointerDown={(e) => startEdgeTrim(e, c, "end")}
 													onKeyDown={(e) => {
@@ -2513,7 +2525,7 @@ export function V4Timeline({
 											>
 												<Pencil size={9} />
 											</span>
-											<span className={styles.tlClipName}>
+											<span id={`tl-clip-name-${c.id}`} className={styles.tlClipName}>
 												{tl.assets.find((a) => a.id === c.assetId)?.label ?? c.assetId}
 											</span>
 											{cardFitsDuration(boxLen * pxPerSec - CLIP_GUTTER_PX, durText) ? (
