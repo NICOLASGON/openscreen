@@ -186,6 +186,19 @@ const CLIP_GUTTER_PX = 6;
 /** The shortest a clip may be left by a trim — the same floor the Edit modal's
  *  handles stop at, so the two ways into this edit agree on what "too short" is. */
 const MIN_CLIP_SEC = 0.05;
+
+/** A clip's out-point in its own media. `sourceEndSec` is optional in the schema — a
+ *  clip whose asset has not been probed carries none — and the honest stand-in is the
+ *  length the clip already occupies on the timeline, which is what the waveform painter
+ *  has always used. Read through here rather than defaulted per call site: `?? 0` puts
+ *  the out-point BEFORE the in-point, and `setClipSourceRange` orders its endpoints, so
+ *  a trim against that fallback commits a collapsed clip rather than failing. */
+function clipOutPointSec(clip: AxcutClip): number {
+	return (
+		clip.sourceEndSec ??
+		clip.sourceStartSec + Math.max(0, clip.timelineEndSec - clip.timelineStartSec)
+	);
+}
 /**
  * Shortest region a resize may leave behind — the storage grid itself (regions
  * are `Math.round`ed to whole ms, and coalesceRegionsForRuler's epsilon is 1 ms),
@@ -1444,7 +1457,7 @@ export function V4Timeline({
 			e.stopPropagation();
 
 			const fromStart = clip.sourceStartSec;
-			const fromEnd = clip.sourceEndSec ?? 0;
+			const fromEnd = clipOutPointSec(clip);
 			// The same bound the Edit modal computes, and for the same reason: it has
 			// to hold the current selection whatever the metadata says, so it falls
 			// back to the out-point. An asset whose duration has not been probed can
@@ -1479,9 +1492,14 @@ export function V4Timeline({
 				});
 			};
 
-			const end = () => {
+			const detach = () => {
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", end);
+				window.removeEventListener("pointercancel", cancel);
+			};
+
+			const end = () => {
+				detach();
 				setEdgeTrim(null);
 				// A press that never moved is not an edit, and writing one would put an
 				// empty step on the undo stack.
@@ -1490,8 +1508,19 @@ export function V4Timeline({
 				if (moved) void tl.applyClipEdit(clip.id, next.start, next.end);
 			};
 
+			// The browser takes the pointer away on a palm rejection, a system gesture, or
+			// a lost capture, and then sends no `pointerup` at all. Without this the drag
+			// stays live: the preview is frozen on screen, `pointermove` keeps tracking the
+			// cursor, and the next unrelated release commits a trim nobody asked for.
+			// Cancelled means abandoned, so it drops the pending range rather than writing it.
+			const cancel = () => {
+				detach();
+				setEdgeTrim(null);
+			};
+
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", end, { once: true });
+			window.addEventListener("pointercancel", cancel, { once: true });
 		},
 		[pxPerSec, tl],
 	);
@@ -1503,7 +1532,7 @@ export function V4Timeline({
 	const nudgeEdge = useCallback(
 		(clip: AxcutClip, edge: "start" | "end", stepSec: number) => {
 			const fromStart = clip.sourceStartSec;
-			const fromEnd = clip.sourceEndSec ?? 0;
+			const fromEnd = clipOutPointSec(clip);
 			const asset = tl.assets.find((a) => a.id === clip.assetId);
 			const sourceDurationSec = Math.max(asset?.durationSec ?? 0, fromEnd, 0.001);
 			const next =
@@ -2382,7 +2411,7 @@ export function V4Timeline({
 											videoUrl={clipVideoUrl}
 											assetDurationSec={asset?.durationSec}
 											sourceStartSec={c.sourceStartSec}
-											sourceEndSec={c.sourceEndSec ?? c.sourceStartSec + dur}
+											sourceEndSec={clipOutPointSec(c)}
 											gain={audioGainScalar(settings.audioGainDb)}
 										/>
 										{/* Only on a card wide enough to hold them. Below that the two grips

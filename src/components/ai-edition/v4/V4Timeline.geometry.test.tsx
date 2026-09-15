@@ -867,6 +867,43 @@ describe("V4Timeline clip edge trim", () => {
 		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799);
 	});
 
+	// `sourceEndSec` is optional in the schema — an unprobed asset carries none — and
+	// the waveform painter has always stood in the clip's timeline length for it. The
+	// trim handlers defaulted to 0 instead, which puts the out-point BEFORE the
+	// in-point: `setClipSourceRange` then orders the pair and commits a clip collapsed
+	// to the minimum rather than the trim that was asked for.
+	const unprobed = () => ({ ...clip(0, TOTAL_SEC), sourceEndSec: undefined });
+
+	it("trims a clip whose out-point was never probed against the length it occupies", () => {
+		const { clipEls, tl } = renderTimeline([unprobed()]);
+		dragHandle(gripFor(clipEls[0], "end"), -100);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+	});
+
+	it("nudges an unprobed clip against that same length", () => {
+		const { clipEls, tl } = renderTimeline([unprobed()]);
+		fireEvent.keyDown(gripFor(clipEls[0], "end"), { key: "ArrowLeft" });
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+	});
+
+	// A palm rejection, a system gesture or a lost capture takes the pointer away and
+	// sends no `pointerup` at all. The drag has to end there: cancelled means abandoned,
+	// and a drag left live would commit on whatever release came next.
+	it("abandons the trim when the browser cancels the pointer", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0 });
+		window.dispatchEvent(new MouseEvent("pointermove", { clientX: -100 }));
+		window.dispatchEvent(new MouseEvent("pointercancel", { clientX: -100 }));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		// And the listeners went with it, so a later, unrelated release is not the
+		// cancelled trim's to commit.
+		window.dispatchEvent(new MouseEvent("pointermove", { clientX: -300 }));
+		window.dispatchEvent(new MouseEvent("pointerup", { clientX: -300 }));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
 	// The grip sits inside the card, whose own pointerdown starts a reorder and
 	// whose click selects. Only one gesture can own the press.
 	it("does not let a trim double as a selection", () => {
