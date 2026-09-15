@@ -963,7 +963,13 @@
 .bgInline {
 	max-height: min(320px, 40vh);
 	overflow-y: auto;
-	overscroll-behavior: contain;
+	/* Chaining left ON, deliberately. `overscroll-behavior: contain` is the reflex here
+	   and it was wrong: the grid fills most of the pane, so the wheel lands on it almost
+	   wherever the pointer is, and containing the scroll meant that once the grid hit its
+	   end the pane never moved at all -- everything under the background section became
+	   unreachable by wheel. Chaining hands the leftover delta up, which is the behaviour
+	   a nested scroller owes its parent when it is this large a share of it. */
+	overscroll-behavior-y: auto;
 }
 /* The picker's own rows are padded for a popover that has no other content; inline they
    sit under a heading that already provides the space above. */
