@@ -28,6 +28,7 @@ import {
 	reanchorAudioTracks,
 	removeAudioTrack,
 	separateAudioLanes,
+	trackGroupId,
 } from "./audioTracks";
 import { createId } from "./ids";
 
@@ -116,6 +117,18 @@ export function buildTimelineFromIntervals(
 			reason: options.reason,
 		};
 	});
+}
+
+/** The transcript of one asset. `document.transcripts` is the store; `document.transcript`
+ *  is the primary asset's copy of the same thing, kept in step by `document/transcript.ts`
+ *  and consulted only as its fallback. Same precedence as `findAssetTranscript` in
+ *  `transcription/status.ts`, restated here rather than imported so this pure module keeps
+ *  depending on nothing but the schema. */
+function assetTranscript(document: AxcutDocument, assetId: string): AxcutTranscript | null {
+	return (
+		document.transcripts.find((t) => t.assetId === assetId) ??
+		(document.transcript?.assetId === assetId ? document.transcript : null)
+	);
 }
 
 function collectWordRefs(
@@ -331,12 +344,24 @@ type StoredRegion = {
 	clipId?: string;
 	sourceStartSec?: number;
 	sourceEndSec?: number;
+	/** Audio only, and the one collection-specific rule this generic walk has to know:
+	 *  the fragments of one user-visible take share it (see `trackGroupId`), so anything
+	 *  that DIVIDES a fragment has to put both halves in the same group or the take comes
+	 *  back as two pills. Absent on every other kind. */
+	trackId?: string;
 };
 
-/** Apply `fn` to all four modifier collections (document-level + legacyEditor envelopes). */
+/** Apply `fn` to all four modifier collections (document-level + legacyEditor envelopes).
+ *
+ *  `repairAudioPlacement: false` skips the audio re-anchor below. Exactly one caller wants
+ *  it — `splitClipAt`, whose whole purpose is to hand the tail's rows to the tail clip, and
+ *  whose work the re-anchor would undo by re-ventilating every take against the clip list as
+ *  it stands BEFORE the cut. Deferred, not skipped: that caller's next step is
+ *  `withClipsChanged`, which runs this walk again, with the new clips, repair and all. */
 function mapAllRegionCollections(
 	document: AxcutDocument,
 	fn: (regions: StoredRegion[], prefix: string) => StoredRegion[],
+	{ repairAudioPlacement = true }: { repairAudioPlacement?: boolean } = {},
 ): AxcutDocument {
 	const legacy = document.legacyEditor as Record<string, unknown> | null;
 	// The envelope is `z.object({}).passthrough()`, so zod validates NOTHING inside it: a
@@ -375,16 +400,16 @@ function mapAllRegionCollections(
 		// Repair, never refusal: a schema refine here would turn an ordinary clip drag into
 		// a thrown save, and would make every existing document with overlapping same-kind
 		// pills unloadable.
-		audioTracks: separateAudioLanes(
-			reanchorAudioTracks(
-				fn(
-					document.audioTracks as unknown as StoredRegion[],
-					"audio",
-				) as unknown as AxcutDocument["audioTracks"],
-				document.timeline.clips,
-				() => createId("audio"),
-			),
-		),
+		audioTracks: (() => {
+			const walked = fn(
+				document.audioTracks as unknown as StoredRegion[],
+				"audio",
+			) as unknown as AxcutDocument["audioTracks"];
+			if (!repairAudioPlacement) return walked;
+			return separateAudioLanes(
+				reanchorAudioTracks(walked, document.timeline.clips, () => createId("audio")),
+			);
+		})(),
 		legacyEditor:
 			legacy && (speedRegions || cameraFullscreenRegions)
 				? {
@@ -1047,10 +1072,20 @@ const MIN_SPLIT_HALF_SEC = 0.05;
  * the side that contains it, on both sides cut down when it straddles the split, and on
  * neither when it is empty there.
  *
- * Word refs are recomputed per half from the transcript rather than split by hand, since
- * that is how they were derived in the first place. With no transcript to recompute from
- * they stay on the head: wrong in the same direction as before the cut, rather than
- * duplicated onto both halves.
+ * Every other clip-anchored row — zoom, annotation, audio take, and the legacy speed and
+ * camera-fullscreen regions — is divided the same way and for a sharper reason: they all
+ * still name the original clip, which is now the head, so the clamp in `withClipsChanged`
+ * would shave a straddling row back to the head's window and delete outright any row that
+ * lived entirely in the tail. A cut is not an edit to what the user placed, so nothing it
+ * touches may lose content.
+ *
+ * Word refs are recomputed per half from the clip's OWN asset's transcript rather than
+ * split by hand, since that is how they were derived in the first place. Per asset and not
+ * `document.transcript`: transcripts are stored one per asset, while this cuts whatever clip
+ * the playhead is on, so the primary transcript would hand a clip of an imported asset word
+ * ids belonging to a different recording. With no transcript to recompute from the refs stay
+ * on the head: wrong in the same direction as before the cut, rather than duplicated onto
+ * both halves.
  *
  * A no-op — never a throw — when the clip is unknown, when `sourceSec` falls outside the
  * clip, or when either half would come out shorter than MIN_SPLIT_HALF_SEC. A split control
@@ -1075,7 +1110,7 @@ export function splitClipAt(
 		return document;
 	}
 
-	const transcript = document.transcript;
+	const transcript = assetTranscript(document, original.assetId);
 	const head: AxcutClip = {
 		...original,
 		sourceEndSec: sourceSec,
@@ -1120,10 +1155,54 @@ export function splitClipAt(
 		return parts;
 	});
 
-	return withClipsChanged(
+	// Every OTHER clip-anchored row gets the same treatment, for the same reason and by the
+	// same arithmetic. A zoom, an annotation, an audio take, a speed or camera-fullscreen
+	// region all name their clip the way a trim does, and all of them keep naming the
+	// original id — which the head now carries. Left alone, `withClipsChanged` hands each
+	// one to `rederiveAnchoredRegion`, which clamps it to the head's window: a row living
+	// entirely in the tail has nothing left there and is dropped outright, and one
+	// straddling the cut loses its tail half. Splitting them here, before the clip list
+	// changes, means the clamp downstream is the no-op it should be.
+	//
+	// The audio repair is held back (`repairAudioPlacement: false`) because it re-ventilates
+	// every take against the CURRENT clips, which are still the pre-cut ones — it would put
+	// the fragments straight back on the original clip. `withClipsChanged` runs it a moment
+	// later against the clips the cut produced, which is where it belongs.
+	const divided = mapAllRegionCollections(
 		{ ...document, timeline: { ...document.timeline, trimRanges: dividedTrims } },
-		next,
+		(regions, prefix) =>
+			regions.flatMap((region) => {
+				if (!hasCompleteClipAnchor(region) || region.clipId !== original.id) return [region];
+				// Both halves stay in the take they came from, so the audio pill that owns
+				// them still collapses back to one row (`collapseTracksToPills`). A no-op
+				// for every other kind, which has no grouping to preserve.
+				const grouped =
+					prefix === "audio" ? { trackId: trackGroupId(region) } : ({} as { trackId?: string });
+				const parts: StoredRegion[] = [];
+				// Only the cut itself is applied here; the outer edges are the existing
+				// clamp's business, and it runs on both halves straight after.
+				const headEnd = Math.min(region.sourceEndSec, sourceSec);
+				if (headEnd - region.sourceStartSec > REGION_WINDOW_EPSILON_SEC) {
+					parts.push({ ...region, ...grouped, sourceEndSec: headEnd });
+				}
+				const tailStart = Math.max(region.sourceStartSec, sourceSec);
+				if (region.sourceEndSec - tailStart > REGION_WINDOW_EPSILON_SEC) {
+					// A new id only on the tail side, exactly as above: the head kept the
+					// original clip's id, so its share can keep the row's.
+					parts.push({
+						...region,
+						...grouped,
+						id: createId(prefix),
+						clipId: tail.id,
+						sourceStartSec: tailStart,
+					});
+				}
+				return parts;
+			}),
+		{ repairAudioPlacement: false },
 	);
+
+	return withClipsChanged(divided, next);
 }
 
 /**

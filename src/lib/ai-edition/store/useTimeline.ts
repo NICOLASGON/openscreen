@@ -1063,8 +1063,10 @@ export function useTimeline() {
 		// splitClipAt is a no-op on a cut it refuses — on a boundary, or too close to one.
 		// Identity means nothing to save and nothing to report.
 		if (next === doc) return false;
-		await saveDocument(next, { history: true });
-		return true;
+		// The write's own verdict, not an optimistic one: `saveDocument` returns false on a
+		// superseded or failed write and leaves the store alone, and a control that reports
+		// a cut the document never took is worse than one that says nothing.
+		return await saveDocument(next, { history: true });
 	}, [saveDocument]);
 
 	const applyClipEdit = useCallback(

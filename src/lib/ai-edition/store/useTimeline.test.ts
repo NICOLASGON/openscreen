@@ -918,6 +918,79 @@ describe("useTimeline save failures", () => {
 		expect(added).toBe(0);
 		expect(useProjectStore.getState().document?.zoomRanges).toHaveLength(0);
 	});
+
+	// Same shape of bug as the one above: the toolbar shows "nothing to cut" on a
+	// falsy answer, so reporting success on a write that never landed left a control
+	// claiming a cut the document does not have.
+	it("reports no cut when the split's write fails", async () => {
+		useProjectStore.setState({ currentTimeSec: 4 });
+		const { result } = renderTimeline();
+
+		let didCut: boolean | undefined;
+		await act(async () => {
+			didCut = await result.current.splitClipAtPlayhead();
+		});
+
+		expect(didCut).toBe(false);
+		expect(useProjectStore.getState().document?.timeline.clips).toHaveLength(1);
+	});
+});
+
+// The split control in the timeline toolbar: the playhead runs on TIMELINE time and a
+// clip is cut in its own MEDIA time, so the carrier is found by containment and the
+// instant mapped through it. The cut itself is `document/timeline.ts#splitClipAt`, which
+// has its own tests; what is this hook's is the projection and the verdict it returns.
+describe("useTimeline.splitClipAtPlayhead", () => {
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: sampleDoc,
+			revision: 1,
+			status: "ready",
+			error: null,
+			currentTimeSec: 4,
+		});
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("cuts the clip under the playhead and says so", async () => {
+		const { result } = renderTimeline();
+
+		let didCut: boolean | undefined;
+		await act(async () => {
+			didCut = await result.current.splitClipAtPlayhead();
+		});
+
+		expect(didCut).toBe(true);
+		const clips = useProjectStore.getState().document?.timeline.clips ?? [];
+		expect(clips).toHaveLength(2);
+		expect(clips[0]).toMatchObject({ sourceStartSec: 0, sourceEndSec: 4 });
+		expect(clips[1]).toMatchObject({ sourceStartSec: 4, sourceEndSec: 10 });
+	});
+
+	// Parked past the last clip: there is nothing under the playhead to cut, which is
+	// the honest answer rather than cutting the nearest clip instead.
+	it("says nothing was cut when the playhead is off every clip", async () => {
+		useProjectStore.setState({ currentTimeSec: 25 });
+		const { result } = renderTimeline();
+
+		let didCut: boolean | undefined;
+		await act(async () => {
+			didCut = await result.current.splitClipAtPlayhead();
+		});
+
+		expect(didCut).toBe(false);
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+	});
 });
 
 describe("useTimeline undo history", () => {
