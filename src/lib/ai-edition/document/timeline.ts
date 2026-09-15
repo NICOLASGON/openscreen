@@ -1090,7 +1090,7 @@ const MIN_SPLIT_HALF_SEC = 0.05;
  * A no-op — never a throw — when the clip is unknown, when `sourceSec` falls outside the
  * clip, or when either half would come out shorter than MIN_SPLIT_HALF_SEC. A split control
  * is a thing people press with the playhead parked anywhere, including on a clip boundary,
- * where the honest answer is that there is nothing to cut.
+ * where the honest answer is that there is nowhere to split.
  */
 export function splitClipAt(
 	document: AxcutDocument,

@@ -919,19 +919,19 @@ describe("useTimeline save failures", () => {
 		expect(useProjectStore.getState().document?.zoomRanges).toHaveLength(0);
 	});
 
-	// Same shape of bug as the one above: the toolbar shows "nothing to cut" on a
+	// Same shape of bug as the one above: the toolbar says nothing was split on a
 	// falsy answer, so reporting success on a write that never landed left a control
 	// claiming a cut the document does not have.
 	it("reports no cut when the split's write fails", async () => {
 		useProjectStore.setState({ currentTimeSec: 4 });
 		const { result } = renderTimeline();
 
-		let didCut: boolean | undefined;
+		let didSplit: boolean | undefined;
 		await act(async () => {
-			didCut = await result.current.splitClipAtPlayhead();
+			didSplit = await result.current.splitClipAtPlayhead();
 		});
 
-		expect(didCut).toBe(false);
+		expect(didSplit).toBe(false);
 		expect(useProjectStore.getState().document?.timeline.clips).toHaveLength(1);
 	});
 });
@@ -995,12 +995,12 @@ describe("useTimeline.splitClipAtPlayhead", () => {
 	it("cuts the clip under the playhead, at the frame of its own media the playhead is on", async () => {
 		const { result } = renderTimeline();
 
-		let didCut: boolean | undefined;
+		let didSplit: boolean | undefined;
 		await act(async () => {
-			didCut = await result.current.splitClipAtPlayhead();
+			didSplit = await result.current.splitClipAtPlayhead();
 		});
 
-		expect(didCut).toBe(true);
+		expect(didSplit).toBe(true);
 		const clips = useProjectStore.getState().document?.timeline.clips ?? [];
 		expect(clips).toHaveLength(3);
 		// The clip the playhead is NOT on is untouched, id and all: containment picks the
@@ -1023,12 +1023,12 @@ describe("useTimeline.splitClipAtPlayhead", () => {
 		useProjectStore.setState({ currentTimeSec: 25 });
 		const { result } = renderTimeline();
 
-		let didCut: boolean | undefined;
+		let didSplit: boolean | undefined;
 		await act(async () => {
-			didCut = await result.current.splitClipAtPlayhead();
+			didSplit = await result.current.splitClipAtPlayhead();
 		});
 
-		expect(didCut).toBe(false);
+		expect(didSplit).toBe(false);
 		expect(bridgeMocks.save).not.toHaveBeenCalled();
 	});
 });

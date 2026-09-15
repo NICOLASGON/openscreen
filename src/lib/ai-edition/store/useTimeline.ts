@@ -1048,7 +1048,7 @@ export function useTimeline() {
 	 *  nearest clip when nothing contains the point — right for a trim dragged onto the
 	 *  ruler, wrong here, where it would cut a clip the playhead is not even on.
 	 *
-	 *  Returns whether it cut, so a caller can say nothing happened rather than leave a
+	 *  Returns whether it split, so a caller can say nothing happened rather than leave a
 	 *  control that looks broken when the playhead sits on a boundary. */
 	const splitClipAtPlayhead = useCallback(async (): Promise<boolean> => {
 		const doc = useProjectStore.getState().document;
