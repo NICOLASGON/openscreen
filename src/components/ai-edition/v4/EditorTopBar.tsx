@@ -21,6 +21,7 @@ import {
 import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	useEffect,
+	useId,
 	useMemo,
 	useRef,
 	useState,
@@ -216,6 +217,7 @@ function ProjectNameField({
 	const t = useScopedT("editor");
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(title ?? "");
+	const unsavedId = useId();
 
 	const startEditing = () => {
 		setDraft(title ?? "");
@@ -259,6 +261,10 @@ function ProjectNameField({
 				type="button"
 				className={`${styles.ghostBtn} ${styles.projectNameBtn}`}
 				aria-label={t("topbar.renameProject")}
+				// Tied to the button rather than left loose beside it: a detached sibling is
+				// read when the reader walks the bar and never when the button is focused,
+				// which is the one moment the state is worth knowing.
+				aria-describedby={modified ? unsavedId : undefined}
 				// The label is truncated to keep the slot fixed, so the full name has to
 				// stay reachable on hover.
 				title={title ?? undefined}
@@ -271,7 +277,11 @@ function ProjectNameField({
 			{/* The marker above is decoration to a screen reader, and the button's
 			    aria-label swallows anything nested in it, so the state is spelled out
 			    here instead — the one piece of the old status badge worth keeping. */}
-			{modified ? <span className="sr-only">{t("topbar.unsaved")}</span> : null}
+			{modified ? (
+				<span id={unsavedId} className="sr-only">
+					{t("topbar.unsaved")}
+				</span>
+			) : null}
 		</>
 	);
 }

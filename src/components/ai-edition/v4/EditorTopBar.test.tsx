@@ -34,6 +34,10 @@ afterEach(cleanup);
 
 const noop = () => {};
 
+/** The project-name / rename button, named by its aria-label rather than by the
+ *  title it paints — the title is what changes between these cases. */
+const nameButton = () => screen.getByRole("button", { name: "topbar.renameProject" });
+
 function renderTopBar(projectTitle: string | null, dirty = false) {
 	const onRename = vi.fn();
 	const onShowAbout = vi.fn();
@@ -279,11 +283,17 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		renderTopBar("Demo Project");
 		expect(screen.queryByText("topbar.unsaved")).not.toBeInTheDocument();
 		expect(screen.queryByText("topbar.saved")).not.toBeInTheDocument();
+		// Not "no description at all": the hover title describes the button on every
+		// bar. What has to be absent is the unsaved state.
+		expect(nameButton()).not.toHaveAccessibleDescription("topbar.unsaved");
 	});
 
+	// The accessible DESCRIPTION, not the mere presence of the text: a span sitting
+	// loose beside the button is announced when a reader walks past it and stays
+	// silent on the focus that matters, which is indistinguishable from the bug.
 	it("announces the unsaved state once the document is modified", () => {
 		renderTopBar("Demo Project", true);
-		expect(screen.getByText("topbar.unsaved")).toBeInTheDocument();
+		expect(nameButton()).toHaveAccessibleDescription("topbar.unsaved");
 	});
 
 	// A project-less bar reads "No project", which an unsaved marker beside it
@@ -291,6 +301,7 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 	it("keeps the unsaved marker off a bar with no project", () => {
 		renderTopBar(null, true);
 		expect(screen.queryByText("topbar.unsaved")).not.toBeInTheDocument();
+		expect(nameButton()).not.toHaveAccessibleDescription();
 	});
 
 	it("names every mode tab independently of the width its label is painted at", () => {
