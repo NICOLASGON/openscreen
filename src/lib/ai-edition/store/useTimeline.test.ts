@@ -941,6 +941,33 @@ describe("useTimeline save failures", () => {
 // instant mapped through it. The cut itself is `document/timeline.ts#splitClipAt`, which
 // has its own tests; what is this hook's is the projection and the verdict it returns.
 describe("useTimeline.splitClipAtPlayhead", () => {
+	// The second clip's two windows deliberately DISAGREE: it sits at 10s–20s on the
+	// timeline and plays 30s–40s of its file. A fixture where they match (as the shared
+	// one does) cannot tell the projection apart from handing the playhead's own value
+	// straight to `splitClipAt`, which would cut the wrong frame on every real project.
+	// It also starts nowhere near where the first clip stops, so the contiguity fold
+	// leaves the pair alone.
+	const twoWindowDoc: AxcutDocument = {
+		...sampleDoc,
+		timeline: {
+			...sampleDoc.timeline,
+			clips: [
+				sampleDoc.timeline.clips[0],
+				{
+					id: "clip_b",
+					assetId: "asset_1",
+					sourceStartSec: 30,
+					sourceEndSec: 40,
+					timelineStartSec: 10,
+					timelineEndSec: 20,
+					wordRefs: [],
+					origin: "user" as const,
+					reason: "",
+				},
+			],
+		},
+	};
+
 	beforeEach(() => {
 		useProjectStore.getState().clear();
 		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
@@ -950,11 +977,14 @@ describe("useTimeline.splitClipAtPlayhead", () => {
 		}));
 		useProjectStore.setState({
 			projectId: "proj_test",
-			document: sampleDoc,
+			document: twoWindowDoc,
 			revision: 1,
 			status: "ready",
 			error: null,
-			currentTimeSec: 4,
+			// Inside the second clip, 4s into the 10s it occupies — so the cut belongs at
+			// 34s of the file, and anything reading the playhead literally lands at 14s,
+			// which is not even inside the clip's source window.
+			currentTimeSec: 14,
 		});
 	});
 
@@ -962,7 +992,7 @@ describe("useTimeline.splitClipAtPlayhead", () => {
 		vi.clearAllMocks();
 	});
 
-	it("cuts the clip under the playhead and says so", async () => {
+	it("cuts the clip under the playhead, at the frame of its own media the playhead is on", async () => {
 		const { result } = renderTimeline();
 
 		let didCut: boolean | undefined;
@@ -972,14 +1002,24 @@ describe("useTimeline.splitClipAtPlayhead", () => {
 
 		expect(didCut).toBe(true);
 		const clips = useProjectStore.getState().document?.timeline.clips ?? [];
-		expect(clips).toHaveLength(2);
-		expect(clips[0]).toMatchObject({ sourceStartSec: 0, sourceEndSec: 4 });
-		expect(clips[1]).toMatchObject({ sourceStartSec: 4, sourceEndSec: 10 });
+		expect(clips).toHaveLength(3);
+		// The clip the playhead is NOT on is untouched, id and all: containment picks the
+		// carrier, so a projection that drifted would cut a neighbour instead.
+		expect(clips[0]).toMatchObject({ id: "clip_a", sourceStartSec: 0, sourceEndSec: 10 });
+		expect(clips[1]).toMatchObject({ id: "clip_b", sourceStartSec: 30, sourceEndSec: 34 });
+		expect(clips[2]).toMatchObject({ sourceStartSec: 34, sourceEndSec: 40 });
+		// And the programme is the length it was, the halves meeting where the playhead is.
+		expect(clips.map((c) => [c.timelineStartSec, c.timelineEndSec])).toEqual([
+			[0, 10],
+			[10, 14],
+			[14, 20],
+		]);
 	});
 
 	// Parked past the last clip: there is nothing under the playhead to cut, which is
 	// the honest answer rather than cutting the nearest clip instead.
 	it("says nothing was cut when the playhead is off every clip", async () => {
+		// Past the end of the programme, which stops at 20s here.
 		useProjectStore.setState({ currentTimeSec: 25 });
 		const { result } = renderTimeline();
 
