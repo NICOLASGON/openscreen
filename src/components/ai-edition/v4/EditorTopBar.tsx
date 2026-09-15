@@ -31,6 +31,7 @@ import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useTheme } from "@/hooks/useTheme";
 import type { Locale } from "@/i18n/config";
 import { getAvailableLocales, getLocaleName, getLocaleShort } from "@/i18n/loader";
+import { StylePresetsMenu } from "../StylePresetsMenu";
 import styles from "./EditorShellV4.module.css";
 
 export type EditorMode = "media" | "edit" | "rec";
@@ -176,6 +177,11 @@ export function EditorTopBar({
 				))}
 			</div>
 
+			{/* A preset is the whole look the right panel's panes edit — Composition, camera,
+			    cursor — so its entry sits in the bar, reachable from every pane and mode,
+			    rather than in any one pane's header. It stays on the project side of the
+			    bar, ahead of the two app-wide preferences. */}
+			<StylePresetsMenu />
 			{/* Language and theme are the two app-wide preferences in this bar, so they
 			    sit together at its right end rather than one of them being stranded
 			    among the per-project file actions. .langMenu is anchored right:0, so
