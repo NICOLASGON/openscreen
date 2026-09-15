@@ -164,12 +164,20 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
+/** One pointer's event, carrying the id that ties it to the gesture it belongs to.
+ *  jsdom's `fireEvent.pointerDown` defaults `pointerId` to 0 while a hand-built
+ *  `MouseEvent` leaves it undefined, so a handler that filters on the id — the edge
+ *  trim does, or a second finger could end someone else's drag — would ignore a
+ *  sequence dispatched as plain mouse events. */
+const pointerEvent = (type: string, clientX: number, pointerId = 0) =>
+	new PointerEvent(type, { clientX, pointerId, bubbles: true });
+
 /** Drag a handle by `dxPx`. The move/up listeners live on `window`, so the drag
  *  is driven by pointer deltas alone — the handle may re-mount under it. */
-function dragHandle(handle: Element, dxPx: number) {
-	fireEvent.pointerDown(handle, { clientX: 0 });
-	window.dispatchEvent(new MouseEvent("pointermove", { clientX: dxPx }));
-	window.dispatchEvent(new MouseEvent("pointerup", { clientX: dxPx }));
+function dragHandle(handle: Element, dxPx: number, pointerId = 0) {
+	fireEvent.pointerDown(handle, { clientX: 0, pointerId });
+	window.dispatchEvent(pointerEvent("pointermove", dxPx, pointerId));
+	window.dispatchEvent(pointerEvent("pointerup", dxPx, pointerId));
 }
 
 /** Ctrl+wheel up = zoom in; the handler is a native listener, so dispatch real events.
@@ -848,7 +856,7 @@ describe("V4Timeline clip edge trim", () => {
 		const { clipEls, tl } = renderTimeline();
 		const grip = gripFor(clipEls[0], "end");
 		fireEvent.pointerDown(grip, { clientX: 0 });
-		window.dispatchEvent(new MouseEvent("pointerup", { clientX: 0 }));
+		window.dispatchEvent(pointerEvent("pointerup", 0));
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 	});
 
@@ -896,15 +904,49 @@ describe("V4Timeline clip edge trim", () => {
 		const { clipEls, tl } = renderTimeline();
 		const grip = gripFor(clipEls[0], "end");
 		fireEvent.pointerDown(grip, { clientX: 0 });
-		window.dispatchEvent(new MouseEvent("pointermove", { clientX: -100 }));
-		window.dispatchEvent(new MouseEvent("pointercancel", { clientX: -100 }));
+		window.dispatchEvent(pointerEvent("pointermove", -100));
+		window.dispatchEvent(pointerEvent("pointercancel", -100));
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 
 		// And the listeners went with it, so a later, unrelated release is not the
 		// cancelled trim's to commit.
-		window.dispatchEvent(new MouseEvent("pointermove", { clientX: -300 }));
-		window.dispatchEvent(new MouseEvent("pointerup", { clientX: -300 }));
+		window.dispatchEvent(pointerEvent("pointermove", -300));
+		window.dispatchEvent(pointerEvent("pointerup", -300));
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// `window` hears every pointer on the device. On a touchscreen a second finger is an
+	// ordinary thing to put down mid-drag, and it used to end the first one's trim —
+	// committing a range from a release that happened somewhere else entirely, and taking
+	// the `{ once: true }` listeners with it so the finger still dragging ended up
+	// attached to nothing.
+	it("lets a second finger come and go without ending the first one's trim", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -50, 1));
+
+		// Another pointer lands far away, moves, and lifts.
+		window.dispatchEvent(pointerEvent("pointermove", 400, 2));
+		window.dispatchEvent(pointerEvent("pointerup", 400, 2));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+
+		// The trim is still live, still the first pointer's, and still tracking only it.
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+	});
+
+	// Same for a cancel: the browser taking another pointer away says nothing about this one.
+	it("keeps the trim when a different pointer is cancelled", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.pointerDown(grip, { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		window.dispatchEvent(pointerEvent("pointercancel", 0, 2));
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
 	});
 
 	// The shell renders the timeline conditionally, so it can go away under a drag that
@@ -914,9 +956,9 @@ describe("V4Timeline clip edge trim", () => {
 	it("drops a trim still in flight when the timeline unmounts", () => {
 		const { clipEls, tl, unmount } = renderTimeline();
 		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0 });
-		window.dispatchEvent(new MouseEvent("pointermove", { clientX: -100 }));
+		window.dispatchEvent(pointerEvent("pointermove", -100));
 		unmount();
-		window.dispatchEvent(new MouseEvent("pointerup", { clientX: -100 }));
+		window.dispatchEvent(pointerEvent("pointerup", -100));
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 	});
 

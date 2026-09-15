@@ -1477,7 +1477,16 @@ export function V4Timeline({
 			let next = { start: fromStart, end: fromEnd };
 			setEdgeTrim({ id: clip.id, edge, deltaSec: 0 });
 
+			// The listeners sit on `window`, which hears every pointer on the device, not
+			// just the one that started this. On a touchscreen a second finger's release
+			// would otherwise commit the first finger's trim halfway through it — and, when
+			// the terminal listeners were `{ once: true }`, unregister them on its way out,
+			// so the finger still dragging ended up attached to nothing.
+			const pointerId = e.pointerId;
+			const ours = (ev: PointerEvent) => ev.pointerId === pointerId;
+
 			const move = (moveEvent: PointerEvent) => {
+				if (!ours(moveEvent)) return;
 				const deltaSec = (moveEvent.clientX - startX) / pxPerSec;
 				next =
 					edge === "start"
@@ -1506,7 +1515,8 @@ export function V4Timeline({
 				abortEdgeTrimRef.current = null;
 			};
 
-			const end = () => {
+			const end = (endEvent: PointerEvent) => {
+				if (!ours(endEvent)) return;
 				detach();
 				setEdgeTrim(null);
 				// A press that never moved is not an edit, and writing one would put an
@@ -1521,7 +1531,11 @@ export function V4Timeline({
 			// stays live: the preview is frozen on screen, `pointermove` keeps tracking the
 			// cursor, and the next unrelated release commits a trim nobody asked for.
 			// Cancelled means abandoned, so it drops the pending range rather than writing it.
-			const cancel = () => {
+			// Called both by the browser (with the event) and by the unmount effect (without
+			// one), which is abandoning the gesture outright and does not get to be picky
+			// about whose pointer it was.
+			const cancel = (cancelEvent?: PointerEvent) => {
+				if (cancelEvent && !ours(cancelEvent)) return;
 				detach();
 				setEdgeTrim(null);
 			};
@@ -1530,9 +1544,11 @@ export function V4Timeline({
 			// mid-drag, so the unmount effect needs a way to call the whole thing off.
 			abortEdgeTrimRef.current = cancel;
 
+			// Not `{ once: true }`: a listener that filters has to survive the events it
+			// filters out, and `detach` removes all three the moment this gesture is over.
 			window.addEventListener("pointermove", move);
-			window.addEventListener("pointerup", end, { once: true });
-			window.addEventListener("pointercancel", cancel, { once: true });
+			window.addEventListener("pointerup", end);
+			window.addEventListener("pointercancel", cancel);
 		},
 		[pxPerSec, tl],
 	);
