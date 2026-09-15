@@ -1181,12 +1181,20 @@ export function splitClipAt(
 				const parts: StoredRegion[] = [];
 				// Only the cut itself is applied here; the outer edges are the existing
 				// clamp's business, and it runs on both halves straight after.
+				//
+				// `> 0`, not the epsilon: with the epsilon this code was deciding "too small to
+				// keep", which is a rule that already exists, once, in `rederiveAnchoredRegion`.
+				// It changes nothing that anyone can see — measured on a 0.001s region straddling
+				// the cut, the fragments the epsilon refused to make are exactly the ones the
+				// clamp drops a moment later, so the region disappears either way. It is the
+				// duplication that is worth removing, not a loss: this divides, and the one
+				// place that owns "too short to survive" goes on owning it.
 				const headEnd = Math.min(region.sourceEndSec, sourceSec);
-				if (headEnd - region.sourceStartSec > REGION_WINDOW_EPSILON_SEC) {
+				if (headEnd - region.sourceStartSec > 0) {
 					parts.push({ ...region, ...grouped, sourceEndSec: headEnd });
 				}
 				const tailStart = Math.max(region.sourceStartSec, sourceSec);
-				if (region.sourceEndSec - tailStart > REGION_WINDOW_EPSILON_SEC) {
+				if (region.sourceEndSec - tailStart > 0) {
 					// A new id only on the tail side, exactly as above: the head kept the
 					// original clip's id, so its share can keep the row's.
 					parts.push({
