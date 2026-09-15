@@ -140,7 +140,7 @@ function renderTimeline(
 			/>
 		</ShortcutsProvider>
 	);
-	render(
+	const view = render(
 		onRender ? (
 			<Profiler id="timeline" onRender={onRender}>
 				{timeline}
@@ -154,6 +154,9 @@ function renderTimeline(
 		clipEls: Array.from(document.querySelectorAll<HTMLElement>("[data-clip-id]")),
 		tl,
 		setCurrentTime,
+		// A drag keeps its listeners on `window`, so a test can outlive the component
+		// on purpose and see what the gesture does without one.
+		unmount: view.unmount,
 	};
 }
 
@@ -901,6 +904,19 @@ describe("V4Timeline clip edge trim", () => {
 		// cancelled trim's to commit.
 		window.dispatchEvent(new MouseEvent("pointermove", { clientX: -300 }));
 		window.dispatchEvent(new MouseEvent("pointerup", { clientX: -300 }));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// The shell renders the timeline conditionally, so it can go away under a drag that
+	// is still holding its `window` listeners. Those closures survive the unmount, and
+	// the next release would otherwise write a trim through a hook the user has already
+	// navigated away from.
+	it("drops a trim still in flight when the timeline unmounts", () => {
+		const { clipEls, tl, unmount } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0 });
+		window.dispatchEvent(new MouseEvent("pointermove", { clientX: -100 }));
+		unmount();
+		window.dispatchEvent(new MouseEvent("pointerup", { clientX: -100 }));
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 	});
 

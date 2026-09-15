@@ -659,6 +659,13 @@ export function V4Timeline({
 		edge: "start" | "end";
 		deltaSec: number;
 	} | null>(null);
+	/** Calls off an edge trim still in flight. A drag holds its listeners on `window`, so
+	 *  it outlives this component — which the shell unmounts on its own schedule (it
+	 *  renders the timeline conditionally). Without this the closures survive the
+	 *  unmount and the next stray release commits a trim through a hook the user has
+	 *  navigated away from. Null whenever no trim is being dragged. */
+	const abortEdgeTrimRef = useRef<(() => void) | null>(null);
+	useEffect(() => () => abortEdgeTrimRef.current?.(), []);
 	const { settings, set: setSettings } = useEditorSettings();
 
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
@@ -1496,6 +1503,7 @@ export function V4Timeline({
 				window.removeEventListener("pointermove", move);
 				window.removeEventListener("pointerup", end);
 				window.removeEventListener("pointercancel", cancel);
+				abortEdgeTrimRef.current = null;
 			};
 
 			const end = () => {
@@ -1517,6 +1525,10 @@ export function V4Timeline({
 				detach();
 				setEdgeTrim(null);
 			};
+
+			// The gesture outlives this component if the shell stops rendering the timeline
+			// mid-drag, so the unmount effect needs a way to call the whole thing off.
+			abortEdgeTrimRef.current = cancel;
 
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", end, { once: true });
