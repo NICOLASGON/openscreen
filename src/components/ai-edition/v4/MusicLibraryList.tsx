@@ -99,10 +99,18 @@ export function MusicLibraryList({
 			stopPreview();
 			const audio = new Audio(musicAssetUrl(track));
 			audio.volume = 0.7;
-			audio.addEventListener("ended", () => setPreviewId(null));
-			void audio.play().catch(() => setPreviewId(null));
+			// Both callbacks can fire after the user has moved on to another track: pausing
+			// an element rejects its pending play(). Only the CURRENT preview may clear the
+			// state, or switching previews would reset the button of the one now playing.
+			const finish = () => {
+				if (audioRef.current !== audio) return;
+				audioRef.current = null;
+				setPreviewId(null);
+			};
+			audio.addEventListener("ended", finish);
 			audioRef.current = audio;
 			setPreviewId(track.id);
+			void audio.play().catch(finish);
 		},
 		[previewId, stopPreview],
 	);

@@ -10,19 +10,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { MusicLibraryList } from "./MusicLibraryList";
 
-const TRACKS = [
-	{
-		id: "sleepy-clouds",
-		file: "sleepy-clouds.ogg",
-		title: "Sleepy Clouds",
-		author: "fupi",
-		durationSec: 76.3,
-		mood: ["ambient", "calm"],
-		license: "CC0-1.0",
-		licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
-		sourceUrl: "https://opengameart.org/content/sleepy-clouds",
-	},
-];
+const SLEEPY_CLOUDS = {
+	id: "sleepy-clouds",
+	file: "sleepy-clouds.ogg",
+	title: "Sleepy Clouds",
+	author: "fupi",
+	durationSec: 76.3,
+	mood: ["ambient", "calm"],
+	license: "CC0-1.0",
+	licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+	sourceUrl: "https://opengameart.org/content/sleepy-clouds",
+};
+
+const TRACKS = [SLEEPY_CLOUDS];
+
+const SLOW_STRIDE = {
+	...SLEEPY_CLOUDS,
+	id: "slow-stride",
+	file: "slow-stride.ogg",
+	title: "Slow Stride",
+	author: "isaiah658",
+};
 
 const listMusicCatalogue = vi.fn();
 const openExternalUrl = vi.fn();
@@ -102,6 +110,41 @@ describe("MusicLibraryList", () => {
 		});
 		expect(add).not.toBeDisabled();
 		expect(logged).toHaveBeenCalled();
+	});
+
+	// Switching previews pauses the first element, and pausing rejects its pending
+	// play(). That late rejection used to clear the preview state wholesale, so the
+	// track now playing showed a Play button again.
+	it("keeps the new preview's state when the previous one's play() rejects late", async () => {
+		listMusicCatalogue.mockResolvedValue({ success: true, tracks: [SLEEPY_CLOUDS, SLOW_STRIDE] });
+		let rejectFirst: (error: Error) => void = () => undefined;
+		vi.mocked(window.HTMLMediaElement.prototype.play).mockImplementationOnce(
+			() =>
+				new Promise<void>((_resolve, reject) => {
+					rejectFirst = reject;
+				}),
+		);
+		mount();
+		await screen.findByText("Slow Stride");
+		const [first, second] = screen.getAllByRole("button", { name: /^preview/i });
+		fireEvent.click(first);
+		fireEvent.click(second);
+		expect(screen.getAllByRole("button", { name: /stop preview/i })).toHaveLength(1);
+
+		await act(async () => {
+			rejectFirst(new Error("The play() request was interrupted by a call to pause()."));
+		});
+		expect(screen.getAllByRole("button", { name: /stop preview/i })).toHaveLength(1);
+	});
+
+	it("resets its own button when the current preview fails to play", async () => {
+		vi.mocked(window.HTMLMediaElement.prototype.play).mockRejectedValueOnce(new Error("no codec"));
+		mount();
+		const preview = await screen.findByRole("button", { name: /^preview/i });
+		await act(async () => {
+			fireEvent.click(preview);
+		});
+		expect(screen.queryByRole("button", { name: /stop preview/i })).toBeNull();
 	});
 
 	it("states that no attribution is owed", async () => {
