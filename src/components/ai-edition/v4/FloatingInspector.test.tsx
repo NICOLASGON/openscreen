@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -123,6 +125,37 @@ describe("FloatingInspector", () => {
 		expect(wrap()).toHaveAttribute("data-open", "true");
 	});
 
+	// The rail stays where it is while the panel opens and closes, so the facet that is
+	// already active is still under the pointer and a second click on it closes the panel.
+	it("closes the panel when the active facet is clicked again", () => {
+		const onToggleOpen = vi.fn();
+		const onFacetChange = vi.fn();
+		render(
+			<FloatingInspector
+				{...defaultProps}
+				facet="layout"
+				open
+				onToggleOpen={onToggleOpen}
+				onFacetChange={onFacetChange}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "settings.layout.title" }));
+		expect(onToggleOpen).toHaveBeenCalledTimes(1);
+		expect(onFacetChange).not.toHaveBeenCalled();
+	});
+
+	// On screen the panel opens to the rail's start side, but in the DOM the rail comes
+	// first: press a facet, and the next Tab is in the controls it opened rather than
+	// behind the rest of the rail.
+	it("keeps the rail ahead of the panel in the DOM", () => {
+		render(<FloatingInspector {...defaultProps} facet="layout" open />);
+		const facetButton = screen.getByRole("button", { name: "settings.layout.title" });
+		const pane = screen.getByTestId("layout-pane");
+		expect(
+			facetButton.compareDocumentPosition(pane) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
 	it("renders close button on AudioTrackPane when audio track is selected and deselects on click", () => {
 		const clearSelection = vi.fn();
 		const tl = {
@@ -135,5 +168,40 @@ describe("FloatingInspector", () => {
 		const closeBtn = screen.getByRole("button", { name: "common.actions.close" });
 		fireEvent.click(closeBtn);
 		expect(clearSelection).toHaveBeenCalledTimes(1);
+	});
+});
+
+// Where the rail lands is CSS that jsdom does not lay out, and the failure it guards
+// against is silent: anchor the wrap by the wrong edge, or lay it out in DOM order, and
+// the rail jumps a panel's width every time the panel opens, so a second click on the
+// active facet lands inside the panel instead of closing it. What can be pinned is the
+// contract that keeps it still.
+describe("inspector rail placement contract", () => {
+	const css = readFileSync(path.resolve(__dirname, "EditorShellV4.module.css"), "utf8");
+	const block = (selector: string) => {
+		const start = css.indexOf(`${selector} {`);
+		expect(start, `${selector} rule`).toBeGreaterThanOrEqual(0);
+		return css.slice(start, css.indexOf("}", start));
+	};
+	// Comments mention properties by name; only declarations count.
+	const declarations = (selector: string) => block(selector).replace(/\/\*[\s\S]*?\*\//g, "");
+
+	it("anchors the wrap by its inline end and lays the rail out at that end", () => {
+		const wrap = declarations(".inspectorWrap");
+		expect(wrap).toMatch(/inset-inline-end:\s*20px/);
+		expect(wrap).toMatch(/flex-direction:\s*row-reverse/);
+		// A physical anchor would stay on the right under dir="rtl".
+		expect(wrap).not.toMatch(/(^|\s)(right|left):/);
+	});
+
+	// The seam faces the panel, which is on the rail's start side in either direction.
+	it("joins the rail and the panel on the rail's start side, in logical terms", () => {
+		const rail = declarations(".inspectorWrap[data-open] .facetRail");
+		expect(rail).toMatch(/border-inline-start:\s*0/);
+		expect(rail).toMatch(/border-start-start-radius:\s*0/);
+		expect(rail).toMatch(/border-end-start-radius:\s*0/);
+		const panel = declarations(".inspectorWrap[data-open] .inspector");
+		expect(panel).toMatch(/border-start-end-radius:\s*0/);
+		expect(panel).toMatch(/border-end-end-radius:\s*0/);
 	});
 });
