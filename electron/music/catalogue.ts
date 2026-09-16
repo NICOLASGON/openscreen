@@ -102,10 +102,18 @@ export async function resolveMusicTrackPath(id: string): Promise<string | null> 
  * Deliberately narrow: the stored path must sit directly in a `music/` directory and name a
  * file the manifest knows. A bare basename match would relink any file that happened to
  * share a name with a track.
+ *
+ * The stored path is parsed with `path.win32`, never the host's `path`, because it was
+ * written by whichever machine authored the project. The posix parser treats a backslash
+ * as an ordinary filename character, so a project saved on Windows
+ * (`C:\...\resources\music\x.ogg`) would read as one long filename on macOS or Linux and
+ * never relink. The win32 parser splits on both separators, so it reads a posix path just
+ * as well. That cannot widen what resolves: the last segment must still equal a manifest
+ * `file` exactly, and `resolveMusicTrackPath` confines the result to the catalogue dir.
  */
 export async function resolveBundledMusicPath(storedPath: string): Promise<string | null> {
-	if (path.basename(path.dirname(storedPath)) !== "music") return null;
-	const file = path.basename(storedPath);
+	if (path.win32.basename(path.win32.dirname(storedPath)) !== "music") return null;
+	const file = path.win32.basename(storedPath);
 	const track = (await readManifest()).find((candidate) => candidate.file === file);
 	return track ? resolveMusicTrackPath(track.id) : null;
 }

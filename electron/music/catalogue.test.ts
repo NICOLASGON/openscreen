@@ -116,6 +116,61 @@ describe("music catalogue", () => {
 		).resolves.toBeNull();
 	});
 
+	// A project travels between machines, so the stored path's separators are the
+	// AUTHOR's, not the host's. The posix parser reads `C:\...\music\x.ogg` as a single
+	// filename, which silenced every Windows-authored bed opened on macOS or Linux.
+	it("relinks a path written on Windows, whatever the host", async () => {
+		writeCatalogue([TRACK]);
+		fs.writeFileSync(path.join(assetBase.dir, "music", "sleepy-clouds.ogg"), "audio");
+		const { resolveBundledMusicPath } = await loadModule();
+		await expect(
+			resolveBundledMusicPath(
+				"C:\\Users\\me\\AppData\\Local\\Programs\\openscreen\\resources\\music\\sleepy-clouds.ogg",
+			),
+		).resolves.toBe(path.join(assetBase.dir, "music", "sleepy-clouds.ogg"));
+	});
+
+	// And the other way round. The stored path never goes through the host's `path`, so
+	// what this pins on any host is what a Windows host runs: a posix path read by the
+	// win32 parser still relinks.
+	it("relinks a path written on macOS or Linux on a Windows host", async () => {
+		writeCatalogue([TRACK]);
+		fs.writeFileSync(path.join(assetBase.dir, "music", "sleepy-clouds.ogg"), "audio");
+		const { resolveBundledMusicPath } = await loadModule();
+		await expect(
+			resolveBundledMusicPath("/opt/Openscreen/resources/music/sleepy-clouds.ogg"),
+		).resolves.toBe(path.join(assetBase.dir, "music", "sleepy-clouds.ogg"));
+	});
+
+	it("does not relink a Windows path that is not inside a music directory", async () => {
+		writeCatalogue([TRACK]);
+		fs.writeFileSync(path.join(assetBase.dir, "music", "sleepy-clouds.ogg"), "audio");
+		const { resolveBundledMusicPath } = await loadModule();
+		await expect(
+			resolveBundledMusicPath("C:\\Users\\me\\Downloads\\sleepy-clouds.ogg"),
+		).resolves.toBeNull();
+	});
+
+	// Accepting both separators must not open a way out of the catalogue: dot segments
+	// are never resolved, only the last segment is looked up, and it has to be a file the
+	// manifest lists.
+	it("refuses traversal-shaped stored paths in either separator style", async () => {
+		const outside = path.join(assetBase.dir, "secret.ogg");
+		fs.writeFileSync(outside, "audio");
+		writeCatalogue([TRACK]);
+		fs.writeFileSync(path.join(assetBase.dir, "music", "sleepy-clouds.ogg"), "audio");
+		const { resolveBundledMusicPath } = await loadModule();
+		for (const stored of [
+			"C:\\x\\music\\..\\..\\secret.ogg",
+			"/x/music/../../secret.ogg",
+			"C:\\x\\music\\..\\sleepy-clouds.ogg",
+			"/x/music/..\\secret.ogg",
+			"C:\\x\\music\\sleepy-clouds.ogg\\..\\..\\secret.ogg",
+		]) {
+			await expect(resolveBundledMusicPath(stored)).resolves.toBeNull();
+		}
+	});
+
 	it("does not relink a file the catalogue never listed", async () => {
 		writeCatalogue([TRACK]);
 		const { resolveBundledMusicPath } = await loadModule();
