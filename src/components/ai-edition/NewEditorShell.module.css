@@ -953,26 +953,19 @@
 	background: var(--border);
 }
 
-/* The wallpaper picker, inline in the pane instead of over it.
-   The height cap is the whole reason this can sit inline at all: 18 swatches plus the
-   tabs and the upload button run past 300px, which is what pushed padding, roundness
-   and shadow off a laptop screen and sent the picker into a popover in the first place
-   (#84). Bounded, the section spends a fixed share of the pane and the grid scrolls
-   inside it, so what is below stays reachable no matter how many wallpapers ship.
-   `40vh` rather than a px figure so a tall window gives the grid the room it has. */
-.bgInline {
-	max-height: min(320px, 40vh);
-	overflow-y: auto;
-	/* Chaining left ON, deliberately. `overscroll-behavior: contain` is the reflex here
-	   and it was wrong: the grid fills most of the pane, so the wheel lands on it almost
-	   wherever the pointer is, and containing the scroll meant that once the grid hit its
-	   end the pane never moved at all -- everything under the background section became
-	   unreachable by wheel. Chaining hands the leftover delta up, which is the behaviour
-	   a nested scroller owes its parent when it is this large a share of it. */
-	overscroll-behavior-y: auto;
-}
-/* The picker's own rows are padded for a popover that has no other content; inline they
-   sit under a heading that already provides the space above. */
+/* The wallpaper picker, inline in the pane instead of over it, and deliberately NOT
+   height-capped. A nested scroller was tried first (320px / 40vh) and the gradient tab
+   is what broke it: tabs, preset grid and the 240px-wide editor with its square wheel
+   come to ~600px, so any cap a laptop pane can afford clips the editor, and a 460px cap
+   on the old popover already read as "the gradient panel is gone". The pane is the
+   scroller now: the picker takes the height its current tab needs, and everything under
+   it is one continuous scroll away, with no inner scroll to exhaust before the pane
+   moves. The image grid needs no cap either; its 18 swatches are shorter than the
+   gradient tab.
+
+   What is left for the wrapper is spacing: the picker's own rows are padded for a popover
+   that has no other content, and inline they sit under a heading that already provides
+   the space above. */
 .bgInline .paneTabs { margin-top: 0; }
 .sectionHead .sectionLabel { margin: 0; }
 /* Deliberately quieter than the settings it overwrites: it is reached on purpose, not

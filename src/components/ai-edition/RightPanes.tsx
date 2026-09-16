@@ -343,10 +343,11 @@ function BackgroundSection() {
 			    of the pane on its own and pushed padding/roundness/shadow -- the controls #84
 			    is about -- below the fold, and a user who opened the one appearance tab saw
 			    wallpapers and nothing else. Collapsing it to a trigger fixed that by taking
-			    the space away; this takes back the space and BOUNDS it instead, so the grid
-			    scrolls inside its own budget and the settings under it stay reachable. The
-			    tabs, the grid and the upload button are the picker's own, unchanged: what
-			    changed is that they are on the pane rather than over it. */}
+			    the space away. Inline, it takes its full height and the pane scrolls past it:
+			    no inner cap, because the gradient tab is ~600px tall and any cap a laptop
+			    can afford cuts it in half (see `.bgInline`). The tabs, the grid and the upload
+			    button are the picker's own, unchanged: what changed is that they are on the
+			    pane rather than over it. */}
 			<div className={styles.bgInline}>
 				<WallpaperPicker
 					value={settings.wallpaper}
