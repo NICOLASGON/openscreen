@@ -147,13 +147,13 @@ function renderTimeline(
 	// which is the point: every keydown lands in the same stale render, as the repeats of
 	// a held key do. Clips are copied so a test mutating the document leaves its fixtures be.
 	const shellDoc = { timeline: { clips: clips.map((c) => ({ ...c })) }, assets };
-	const applyThroughShell: OnApplyClipEdit = (clipId, resolveRange) => {
+	const applyThroughShell: OnApplyClipEdit = async (clipId, resolveRange) => {
 		const range = resolveRange(shellDoc as unknown as AxcutDocument);
 		if (!range) return;
 		shellDoc.timeline.clips = shellDoc.timeline.clips.map((c) =>
 			c.id === clipId ? { ...c, sourceStartSec: range.start, sourceEndSec: range.end } : c,
 		);
-		void tl.applyClipEdit(clipId, range.start, range.end);
+		await tl.applyClipEdit(clipId, range.start, range.end);
 	};
 	const setCurrentTime = vi.fn();
 	const timeline = (
@@ -1080,6 +1080,80 @@ describe("V4Timeline clip edge trim", () => {
 		});
 		expect(durationOf()).toBe("15:00.0");
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// The save is async, and the row only shows the trimmed length once the store holds it.
+	// Dropping the preview on release put the card back at its old length for as long as
+	// the save took, then jumped it to the new one: the reorder keeps its preview up through
+	// its save for exactly this, and the trim has to as well.
+	it("keeps the trimmed length on screen until the save has landed", async () => {
+		let landSave = () => {
+			/* replaced below, once the write is queued */
+		};
+		const onApplyClipEdit = vi.fn<OnApplyClipEdit>(
+			() =>
+				new Promise<void>((resolve) => {
+					landSave = resolve;
+				}),
+		);
+		const { clipEls } = renderTimeline([clip(0, 900)], undefined, undefined, undefined, {
+			onApplyClipEdit,
+		});
+		const durationOf = () => document.querySelector('[class*="tlClipDuration"]')?.textContent;
+
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		act(() => {
+			window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		});
+		await act(async () => {
+			window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		});
+		expect(onApplyClipEdit).toHaveBeenCalledTimes(1);
+		expect(durationOf()).toBe("13:20.0");
+
+		// This mock timeline never re-renders with the trimmed clip, so once the preview is
+		// down the card reads the committed length again: that is how its release shows.
+		await act(async () => {
+			landSave();
+		});
+		expect(durationOf()).toBe("15:00.0");
+	});
+
+	// A save that lands late takes down its own preview, not whichever one is up by then.
+	it("leaves a newer trim's preview alone when an older save lands", async () => {
+		let landSave = () => {
+			/* replaced below, once the write is queued */
+		};
+		const onApplyClipEdit = vi.fn<OnApplyClipEdit>(
+			() =>
+				new Promise<void>((resolve) => {
+					landSave = resolve;
+				}),
+		);
+		const { clipEls } = renderTimeline([clip(0, 900)], undefined, undefined, undefined, {
+			onApplyClipEdit,
+		});
+		const durationOf = () => document.querySelector('[class*="tlClipDuration"]')?.textContent;
+
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		act(() => {
+			window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		});
+		await act(async () => {
+			window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		});
+		const landFirstSave = landSave;
+
+		fireEvent.pointerDown(gripFor(clipEls[0], "start"), { clientX: 0, pointerId: 2 });
+		act(() => {
+			window.dispatchEvent(pointerEvent("pointermove", 50, 2));
+		});
+		expect(durationOf()).toBe("14:10.0");
+
+		await act(async () => {
+			landFirstSave();
+		});
+		expect(durationOf()).toBe("14:10.0");
 	});
 
 	// Two grips per clip, all carrying the same label: "Adjust clip start" names one

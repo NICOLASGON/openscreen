@@ -205,6 +205,9 @@ function clipOutPointSec(clip: AxcutClip): number {
 	);
 }
 
+/** What the clip row previews of a live edge trim (see `edgeTrim` in the component). */
+type EdgeTrimPreview = { id: string; edge: "start" | "end"; deltaSec: number };
+
 /** A clip's source range, as an edge trim hands it to `applyClipEdit`. */
 type ClipSourceRange = { start: number; end: number };
 
@@ -677,11 +680,14 @@ export function V4Timeline({
 	 *  with the document as the previous write left it, and answers the range to save, or
 	 *  null to save nothing. A keyboard nudge fires per keydown and a held arrow repeats
 	 *  about thirty times a second, all from the same render: resolved at call time they
-	 *  all named the same range. */
+	 *  all named the same range.
+	 *
+	 *  Settles once the write has, so a drag can keep its preview on screen until the
+	 *  store holds the trimmed clip. */
 	onApplyClipEdit: (
 		clipId: string,
 		resolveRange: (doc: AxcutDocument) => { start: number; end: number } | null,
-	) => void;
+	) => Promise<void>;
 }) {
 	const t = useScopedT("timeline");
 	// The live bindings, not the defaults: these keys are remappable, and a menu
@@ -732,11 +738,7 @@ export function V4Timeline({
 	 *  what the rest of the row has to absorb: clips are laid back-to-back, so a
 	 *  clip that loses half a second pulls everything after it half a second left.
 	 *  Held apart from the committed document so the drag can be abandoned. */
-	const [edgeTrim, setEdgeTrim] = useState<{
-		id: string;
-		edge: "start" | "end";
-		deltaSec: number;
-	} | null>(null);
+	const [edgeTrim, setEdgeTrim] = useState<EdgeTrimPreview | null>(null);
 	/** Calls off an edge trim still in flight. A drag holds its listeners on `window`, so
 	 *  it outlives this component — which the shell unmounts on its own schedule (it
 	 *  renders the timeline conditionally). Without this the closures survive the
@@ -1564,7 +1566,11 @@ export function V4Timeline({
 			// dead zone a reorder has; past it the move is measured from the press, not from
 			// the edge of the dead zone, so the grip does not lag the pointer by 4px.
 			let dragging = false;
-			setEdgeTrim({ id: clip.id, edge, deltaSec: 0 });
+			// The preview this gesture last put on screen. Held so the release can take down
+			// its own preview and nothing newer: the save it waits on is async, and another
+			// press may have started a preview of its own by the time it resolves.
+			let preview: EdgeTrimPreview = { id: clip.id, edge, deltaSec: 0 };
+			setEdgeTrim(preview);
 
 			// The listeners sit on `window`, which hears every pointer on the device, not
 			// just the one that started this. On a touchscreen a second finger's release
@@ -1581,11 +1587,8 @@ export function V4Timeline({
 				const deltaSec = (moveEvent.clientX - startX) / pxPerSec;
 				const next = clampedEdgeRange(clip, assetDurationSec, edge, deltaSec);
 				shiftSec = edge === "start" ? next.start - fromStart : next.end - fromEnd;
-				setEdgeTrim({
-					id: clip.id,
-					edge,
-					deltaSec: next.end - next.start - (fromEnd - fromStart),
-				});
+				preview = { id: clip.id, edge, deltaSec: next.end - next.start - (fromEnd - fromStart) };
+				setEdgeTrim(preview);
 			};
 
 			const detach = () => {
@@ -1595,15 +1598,22 @@ export function V4Timeline({
 				abortEdgeTrimRef.current = null;
 			};
 
-			const end = (endEvent: PointerEvent) => {
+			const end = async (endEvent: PointerEvent) => {
 				if (!ours(endEvent)) return;
 				detach();
-				setEdgeTrim(null);
-				// A press that never left the dead zone is not an edit, and writing one would
-				// put an empty step on the undo stack. (The resolver also refuses a move that
-				// lands on the range the clip already has; this just skips the queue.)
-				if (Math.abs(shiftSec) > 0.001) {
-					onApplyClipEdit(clip.id, resolveEdgeShift(clip.id, edge, shiftSec));
+				try {
+					// A press that never left the dead zone is not an edit, and writing one would
+					// put an empty step on the undo stack. (The resolver also refuses a move that
+					// lands on the range the clip already has; this just skips the queue.)
+					//
+					// Awaited with the preview still up, as the reorder does: dropped first, the
+					// card snapped back to its old length for as long as the save took, then
+					// jumped to the new one when the store caught up.
+					if (Math.abs(shiftSec) > 0.001) {
+						await onApplyClipEdit(clip.id, resolveEdgeShift(clip.id, edge, shiftSec));
+					}
+				} finally {
+					setEdgeTrim((current) => (current === preview ? null : current));
 				}
 			};
 
@@ -1649,7 +1659,7 @@ export function V4Timeline({
 			// steps behind, so the range is worked out in the queue. Against the stop the
 			// resolver answers null and nothing is saved, so holding the key down at the
 			// end of the source does not pile identical steps onto the undo stack.
-			onApplyClipEdit(clipId, resolveEdgeShift(clipId, edge, stepSec));
+			void onApplyClipEdit(clipId, resolveEdgeShift(clipId, edge, stepSec));
 		},
 		[onApplyClipEdit],
 	);

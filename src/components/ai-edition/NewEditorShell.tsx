@@ -1702,8 +1702,10 @@ export function NewEditorShell() {
 						// is a read-modify-write of the whole document, so they all share one.
 						// The range is resolved inside the chain, against the document the
 						// previous write committed, for the reason the hook's `enqueue` gives.
+						// Returned rather than voided: the timeline keeps its preview up until the
+						// save lands, so the card does not snap back to its old length meanwhile.
 						onApplyClipEdit={(clipId, resolveRange) =>
-							void enqueueTimelineWrite(async () => {
+							enqueueTimelineWrite(async () => {
 								const doc = useProjectStore.getState().document;
 								const range = doc ? resolveRange(doc) : null;
 								if (range) await tl.applyClipEdit(clipId, range.start, range.end);
