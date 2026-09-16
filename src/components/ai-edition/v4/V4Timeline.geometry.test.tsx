@@ -927,6 +927,23 @@ describe("V4Timeline clip edge trim", () => {
 		expect(gripsOf(clipEls[1])).toHaveLength(0);
 	});
 
+	// Ctrl+wheel zooms the row with the pointer still down. The drag used to keep the scale
+	// it was pressed at, so after a zoom the same travel still counted two seconds a pixel
+	// while the row was being drawn at the new scale, and the edge came off the cursor.
+	it("reads the zoom a drag is at on every move, not the one it was pressed at", () => {
+		const { clipEls, tl } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		zoomIn(10);
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		const end = tl.applyClipEdit.mock.calls[0][2];
+		// Zoomed in, a pixel is less than two seconds: the same 100px trims less than 200s.
+		expect(end).toBeGreaterThan(1600);
+		expect(end).toBeLessThan(1800);
+	});
+
 	// Whether a card is wide enough for grips is decided by a width that changes under the
 	// grip in use: a nudge shortens the clip, a Ctrl+wheel zooms the row. Unmounting the
 	// focused grip dropped focus to the body mid-edit. Zoomed in, the short clip has room

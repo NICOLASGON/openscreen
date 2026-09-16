@@ -812,6 +812,14 @@ export function V4Timeline({
 	useEffect(() => {
 		setTimelineScale(pxPerSec);
 	}, [pxPerSec]);
+	// The same scale for a gesture already in flight. An edge trim reads it on every move
+	// rather than closing over the value at pointerdown: Ctrl+wheel zooms the row mid-drag,
+	// and against a frozen scale the edge came off the cursor while the clips it ripples
+	// were already being drawn at the new one.
+	const pxPerSecRef = useRef(pxPerSec);
+	useEffect(() => {
+		pxPerSecRef.current = pxPerSec;
+	}, [pxPerSec]);
 
 	// ── region lanes ────────────────────────────────────────────────
 	// zoom/speed/annotation: one pill per row, never coalesced — each carries
@@ -1543,7 +1551,7 @@ export function V4Timeline({
 		(e: ReactPointerEvent, clip: AxcutClip, edge: "start" | "end") => {
 			if (e.button !== 0) return;
 			// Before the panel is measured there is no px→sec rate to drag against.
-			if (!Number.isFinite(pxPerSec) || pxPerSec <= 0) return;
+			if (!Number.isFinite(pxPerSecRef.current) || pxPerSecRef.current <= 0) return;
 			// This handle sits inside the clip card, whose own pointerdown starts a
 			// reorder. Only one of the two gestures can own this press.
 			e.preventDefault();
@@ -1590,7 +1598,9 @@ export function V4Timeline({
 				if (!ours(moveEvent)) return;
 				if (!dragging && Math.abs(moveEvent.clientX - startX) < CLIP_DRAG_START_PX) return;
 				dragging = true;
-				const deltaSec = (moveEvent.clientX - startX) / pxPerSec;
+				const scale = pxPerSecRef.current;
+				if (!Number.isFinite(scale) || scale <= 0) return;
+				const deltaSec = (moveEvent.clientX - startX) / scale;
 				const next = clampedEdgeRange(clip, assetDurationSec, edge, deltaSec);
 				shiftSec = edge === "start" ? next.start - fromStart : next.end - fromEnd;
 				preview = { id: clip.id, edge, deltaSec: next.end - next.start - (fromEnd - fromStart) };
@@ -1647,7 +1657,7 @@ export function V4Timeline({
 			window.addEventListener("pointerup", end);
 			window.addEventListener("pointercancel", cancel);
 		},
-		[pxPerSec, tl, onApplyClipEdit],
+		[tl, onApplyClipEdit],
 	);
 
 	/** The keyboard half of the same edit. These grips are focusable buttons, and a
