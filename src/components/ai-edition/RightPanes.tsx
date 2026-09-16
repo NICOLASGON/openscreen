@@ -384,6 +384,8 @@ function BackgroundSection() {
 	);
 }
 
+// keep the user's last data: URL after they switch tabs so the Image
+// tab can keep showing it without immediately pushing it back through `set`.
 function useMemoCustomWallpapers(current: string): string[] {
 	const [cached, setCached] = useState<string[]>([]);
 	const lastValue = useRef(current);
