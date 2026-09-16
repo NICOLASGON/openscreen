@@ -353,20 +353,25 @@
 	background: var(--surface-2);
 	color: var(--fg);
 }
-/* Arrow keys move focus through this list, so the ring has to be visible — it is
-   the only thing saying where you are before you commit. */
-.langMenuItem:focus-visible {
-	outline: none;
-	background: var(--surface-2);
-	color: var(--fg);
-	box-shadow: var(--focus-ring);
-}
 /* --accent-fill, not --accent: mint on the near-white wash was 2.5:1, which made
    the language you are actually in the least readable line in the menu. The tick
    above carries the state anyway; this only has to stay legible. */
 .langMenuItem[data-active="true"] {
 	background: var(--accent-wash);
 	color: var(--accent-fill);
+}
+/* Arrow keys move focus through this list, so the ring has to be visible: it is
+   the only thing saying where you are before you commit. Two things make it so.
+   It comes AFTER the [data-active] rule, which has the same specificity and used
+   to repaint the focused row back to its wash, and opening the menu focuses that
+   very row. And it is a solid --accent-fill line rather than --focus-ring, whose
+   18% mint halo was 1.1:1 on the wash: 4.4:1 against the row and 5.2:1 against
+   the menu in light theme, 6.4:1 and 7.7:1 in dark. */
+.langMenuItem:focus-visible {
+	outline: 2px solid var(--accent-fill);
+	outline-offset: -2px;
+	background: var(--surface-2);
+	color: var(--fg);
 }
 
 /* One box for every short locale label — see --topbar-lang-label-w. Without it
