@@ -2076,6 +2076,58 @@ describe("splitClipAt", () => {
 		expect(out.timeline.clips[1].wordRefs).toEqual(["w_tail"]);
 	});
 
+	// The flag travels with the clip, and a move re-runs the fold over the whole list. So a
+	// round trip is the edit that would show a flag lost on the way: whichever half goes
+	// away and comes back, the two land next to each other again with timecodes that meet,
+	// and only the flag is left to say the cut was asked for.
+	it("holds through moving either half away and back again", () => {
+		const doc = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 10, timelineEndSec: 10 }),
+					makeClip({
+						id: "other",
+						sourceStartSec: 30,
+						sourceEndSec: 40,
+						timelineStartSec: 10,
+						timelineEndSec: 20,
+					}),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const split = splitClipAt(doc, "clip_1", 4);
+		const tailId = split.timeline.clips[1].id;
+		const windows = (d: AxcutDocument) =>
+			d.timeline.clips.map((c) => [c.id, c.sourceStartSec, c.sourceEndSec]);
+
+		const tailAway = moveClip(split, tailId, 2);
+		expect(windows(tailAway)).toEqual([
+			["clip_1", 0, 4],
+			["other", 30, 40],
+			[tailId, 4, 10],
+		]);
+		const tailBack = moveClip(tailAway, tailId, 1);
+		expect(windows(tailBack)).toEqual([
+			["clip_1", 0, 4],
+			[tailId, 4, 10],
+			["other", 30, 40],
+		]);
+		expect(tailBack.timeline.clips[1].splitFromPrevious).toBe(true);
+
+		const headAway = moveClip(split, "clip_1", 2);
+		const headBack = moveClip(headAway, "clip_1", 0);
+		expect(windows(headBack)).toEqual([
+			["clip_1", 0, 4],
+			[tailId, 4, 10],
+			["other", 30, 40],
+		]);
+	});
+
 	// `replaceTimeline` keeps a clip whose source window a kept interval reproduces, and it
 	// used to keep it field by field: id, origin, reason, word refs, and not the flag. The
 	// agent's `replace_timeline` and `drop_range` both land there, so a split went through

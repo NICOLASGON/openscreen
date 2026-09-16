@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
+import { resolvePlaybackSegments } from "../document/timeline";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { useProjectStore } from "./projectStore";
@@ -1137,6 +1138,59 @@ describe("useTimeline.splitClipAtPlayhead", () => {
 			[0, 10],
 			[10, 14],
 			[14, 20],
+		]);
+	});
+
+	// The projection and the trim division meet here, and each has only been pinned on its
+	// own. The trim is written in the clip's MEDIA time (32s to 37s of the file), the
+	// playhead in TIMELINE time (14s), and the two only agree on where the cut falls once the
+	// playhead has been mapped through the clip. Handing `splitClipAt` 14 would be a no-op
+	// here; handing it anything but 34 would divide the trim at the wrong frame.
+	it("divides a trim straddling the playhead at the frame the playhead maps to", async () => {
+		useProjectStore.setState({
+			document: {
+				...twoWindowDoc,
+				timeline: {
+					...twoWindowDoc.timeline,
+					trimRanges: [
+						{
+							id: "trim_b",
+							clipId: "clip_b",
+							assetId: "asset_1",
+							startSec: 32,
+							endSec: 37,
+							origin: "user",
+							reason: "",
+						},
+					],
+				},
+			},
+		});
+		const { result } = renderTimeline();
+
+		let didSplit: boolean | undefined;
+		await act(async () => {
+			didSplit = await result.current.splitClipAtPlayhead();
+		});
+
+		expect(didSplit).toBe(true);
+		const timeline = useProjectStore.getState().document?.timeline;
+		const [, head, tail] = timeline?.clips ?? [];
+		expect(head).toMatchObject({ id: "clip_b", sourceStartSec: 30, sourceEndSec: 34 });
+		expect(tail).toMatchObject({ sourceStartSec: 34, sourceEndSec: 40 });
+		const trimsOf = (clipId: string) =>
+			(timeline?.trimRanges ?? [])
+				.filter((t) => t.clipId === clipId)
+				.map((t) => [t.startSec, t.endSec]);
+		expect(trimsOf(head.id)).toEqual([[32, 34]]);
+		expect(trimsOf(tail.id)).toEqual([[34, 37]]);
+		// And the film still skips the same five seconds of the file, now in two rows.
+		const played = resolvePlaybackSegments(timeline?.clips ?? [], timeline?.trimRanges ?? [])
+			.filter((s) => s.sourceStartSec >= 30)
+			.map((s) => [s.sourceStartSec, s.sourceEndSec]);
+		expect(played).toEqual([
+			[30, 32],
+			[37, 40],
 		]);
 	});
 
