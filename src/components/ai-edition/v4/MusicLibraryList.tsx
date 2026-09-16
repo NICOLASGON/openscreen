@@ -43,12 +43,40 @@ export function MusicLibraryList({
 	 *  audition in progress is stopped. A bed left playing under a closed panel, with
 	 *  nothing on screen to stop it, is its own bug. */
 	active: boolean;
-	onPick: (track: MusicTrack) => void;
+	/** Awaited when it returns a promise: every Add button stays disabled until it settles.
+	 *  It reports its own failures; a rejection here is only logged. */
+	onPick: (track: MusicTrack) => void | Promise<void>;
 }) {
 	const t = useScopedT("timeline");
 	const tracks = useMusicCatalogue(active);
 	const [previewId, setPreviewId] = useState<string | null>(null);
 	const audioRef = useRef<HTMLAudioElement | null>(null);
+	// The track being added, if any. An add is an IPC round trip, an import and a save, so
+	// a double-click used to start two of them: two assets, two beds. The ref is the guard
+	// (it is set before the second click can land, whatever React has rendered by then);
+	// the state is only what disables the buttons. ALL of them, not just the one clicked:
+	// two different tracks added at once would each build on the same pre-add document.
+	const addingRef = useRef(false);
+	const [addingId, setAddingId] = useState<string | null>(null);
+
+	const pick = useCallback(
+		async (track: MusicTrack) => {
+			if (addingRef.current) return;
+			addingRef.current = true;
+			setAddingId(track.id);
+			try {
+				await onPick(track);
+			} catch (error) {
+				// Reporting is the picker's job (`useAddMusicTrack` toasts every failure); this
+				// only has to make sure a rejection cannot leave the buttons disabled for good.
+				console.error("[music] adding a track failed:", error);
+			} finally {
+				addingRef.current = false;
+				setAddingId(null);
+			}
+		},
+		[onPick],
+	);
 
 	const stopPreview = useCallback(() => {
 		audioRef.current?.pause();
@@ -113,12 +141,18 @@ export function MusicLibraryList({
 								<button
 									type="button"
 									className={styles.musicAddBtn}
+									disabled={addingId !== null}
+									aria-busy={addingId === track.id}
 									onClick={() => {
 										stopPreview();
-										onPick(track);
+										void pick(track);
 									}}
 								>
-									<Music size={13} />
+									{addingId === track.id ? (
+										<Loader2 size={13} className="animate-spin" />
+									) : (
+										<Music size={13} />
+									)}
 									{t("audio.musicAdd")}
 								</button>
 							</div>

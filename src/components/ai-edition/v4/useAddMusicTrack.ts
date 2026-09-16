@@ -16,6 +16,7 @@ import { useScopedT } from "@/contexts/I18nContext";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { MUSIC_BED_DEFAULTS, type MusicTrack } from "@/lib/music";
+import { findExistingAsset } from "./findExistingAsset";
 
 type TimelineApi = ReturnType<typeof useTimeline>;
 
@@ -29,7 +30,12 @@ export function useAddMusicTrack(tl: TimelineApi): (track: MusicTrack) => Promis
 					toast.error(t("audio.musicAddFailed"), { description: resolved?.message });
 					return;
 				}
-				const asset = await useProjectStore.getState().addAudioAsset(resolved.path, track.title);
+				// The same bed picked twice is one asset under two tracks, as it is for a
+				// voiceover take: a second import of the path would leave the probe patching
+				// the wrong asset.
+				const asset =
+					findExistingAsset(resolved.path) ??
+					(await useProjectStore.getState().addAudioAsset(resolved.path, track.title));
 				if (!asset) {
 					toast.error(t("audio.musicAddFailed"));
 					return;

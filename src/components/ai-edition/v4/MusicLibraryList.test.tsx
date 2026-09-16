@@ -5,7 +5,7 @@
 // screen. That last one is not decoration — "do I owe anyone a credit?" is the only
 // question a user has about bundled music, and a silent answer is the wrong one.
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { MusicLibraryList } from "./MusicLibraryList";
@@ -65,6 +65,43 @@ describe("MusicLibraryList", () => {
 		const { onPick } = mount();
 		fireEvent.click(await screen.findByRole("button", { name: /add/i }));
 		expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ id: "sleepy-clouds" }));
+	});
+
+	// An add is an IPC round trip, an import and a save. A double-click used to start two
+	// of them, which meant two assets and two beds for one intent.
+	it("adds a track once however fast it is clicked, and frees the buttons after", async () => {
+		let finish: () => void = () => undefined;
+		const onPick = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		mount(onPick);
+		const add = await screen.findByRole("button", { name: /add/i });
+		fireEvent.click(add);
+		fireEvent.click(add);
+		expect(onPick).toHaveBeenCalledTimes(1);
+		expect(add).toBeDisabled();
+
+		await act(async () => {
+			finish();
+		});
+		expect(add).not.toBeDisabled();
+		fireEvent.click(add);
+		expect(onPick).toHaveBeenCalledTimes(2);
+	});
+
+	it("frees the buttons even when the add fails", async () => {
+		const onPick = vi.fn(() => Promise.reject(new Error("boom")));
+		const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+		mount(onPick);
+		const add = await screen.findByRole("button", { name: /add/i });
+		await act(async () => {
+			fireEvent.click(add);
+		});
+		expect(add).not.toBeDisabled();
+		expect(logged).toHaveBeenCalled();
 	});
 
 	it("states that no attribution is owed", async () => {

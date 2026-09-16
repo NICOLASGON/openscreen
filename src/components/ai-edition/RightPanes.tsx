@@ -3072,7 +3072,7 @@ export function AudioPane({ tl }: { tl: TimelineApi }) {
 			    nowhere to put a track otherwise, and a list that adds nothing when clicked
 			    is worse than a list that says why it is not there. */}
 			{hasDocument ? (
-				<MusicLibraryList active onPick={(track) => void addMusicTrack(track)} />
+				<MusicLibraryList active onPick={addMusicTrack} />
 			) : (
 				<div style={{ padding: "10px 2px", fontSize: 12, color: "var(--muted)" }}>
 					{tt("audio.musicNeedsProject")}

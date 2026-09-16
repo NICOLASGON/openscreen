@@ -2273,8 +2273,12 @@
 	padding: 5px 9px;
 }
 .musicPreviewBtn:hover,
-.musicAddBtn:hover {
+.musicAddBtn:hover:not(:disabled) {
 	background: var(--surface-3, var(--surface-2));
+}
+.musicAddBtn:disabled {
+	opacity: 0.55;
+	cursor: default;
 }
 
 .musicEmpty {
