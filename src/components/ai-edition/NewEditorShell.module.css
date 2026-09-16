@@ -1114,8 +1114,17 @@
 .sliderCell .head { display: flex; align-items: center; gap: 6px; }
 .sliderCell .label { font: 500 var(--fs-app) var(--font-body); color: var(--fg); }
 /* Muted, not brand. Out of a box the readout sits on the same ground as the label, and
-   a mint number there competed with the mint track directly under it for the same fact. */
-.sliderCell .val { font: 500 11px var(--font-mono); color: var(--muted); margin-left: auto; }
+   a mint number there competed with the mint track directly under it for the same fact.
+   The UI face with tabular figures rather than a monospace one, in step with the app's
+   other numeric readouts leaving the mono face (#667): tabular-nums keeps the value from
+   twitching as it changes under the drag, which was the one job the mono face did. It
+   comes after the `font` shorthand, which would otherwise reset it. */
+.sliderCell .val {
+	font: 500 11px var(--font-body);
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+	margin-left: auto;
+}
 .sliderCell input[type=range] {
 	width: 100%;
 	height: 4px;
