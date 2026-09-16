@@ -423,6 +423,30 @@ describe("EditorTopBar language menu", () => {
 		expect(document.activeElement).toBe(items()[getLocaleIndex("pt-BR")]);
 	});
 
+	// Two locales share the "z" code prefix. Accumulating "zz" matched nothing, so the
+	// second one could not be reached by typing at all; the repeated key has to step to
+	// the next match instead, and wrap back to the first.
+	it("cycles through the matches when the same key is pressed again", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		fireEvent.keyDown(menu, { key: "z" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("zh-CN")]);
+		fireEvent.keyDown(menu, { key: "z" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("zh-TW")]);
+		fireEvent.keyDown(menu, { key: "z" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("zh-CN")]);
+	});
+
+	// A fresh letter searches past the row you are on, or typing the initial of the
+	// language already focused would leave you where you are.
+	it("moves past the focused row when its own initial is typed", () => {
+		const { items } = openMenu();
+		const menu = screen.getByRole("menu");
+		expect(document.activeElement).toBe(items()[getLocaleIndex("en")]);
+		fireEvent.keyDown(menu, { key: "e" });
+		expect(document.activeElement).toBe(items()[getLocaleIndex("es")]);
+	});
+
 	it("picks a language and closes, returning focus to the trigger", () => {
 		const { trigger, items } = openMenu();
 		fireEvent.click(items()[getLocaleIndex("fr")]);

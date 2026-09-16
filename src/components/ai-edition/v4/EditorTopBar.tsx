@@ -572,17 +572,25 @@ function LangButton() {
 		const now = Date.now();
 		const buffer = now - typeahead.current.at < 600 ? typeahead.current.buffer + e.key : e.key;
 		typeahead.current = { buffer, at: now };
-		const needle = buffer.toLowerCase();
+		// The same key pressed again ("zz") is not a two-letter search, which would
+		// match nothing: it asks for the next row starting with that letter, so zh-CN
+		// steps on to zh-TW and wraps back. A new single letter also starts past the
+		// focused row, or pressing it on a match would go nowhere. A longer search
+		// still includes the focused row, which is what keeps "po" on Português.
+		const repeated = [...buffer].every((ch) => ch === buffer[0]);
+		const needle = (repeated ? buffer[0] : buffer).toLowerCase();
+		const from = at < 0 ? 0 : needle.length === 1 ? at + 1 : at;
 		// The code as well as the name: "Français" is reachable by typing it, 日本語
 		// is not, and "ja" is what a Latin keyboard can actually produce.
-		const hit = locales.findIndex(
-			(code) =>
-				getLocaleName(code).toLowerCase().startsWith(needle) ||
-				code.toLowerCase().startsWith(needle),
-		);
-		if (hit >= 0) {
-			e.preventDefault();
-			list[hit]?.focus();
+		const matches = (code: Locale) =>
+			getLocaleName(code).toLowerCase().startsWith(needle) || code.toLowerCase().startsWith(needle);
+		for (let step = 0; step < locales.length; step++) {
+			const index = (from + step) % locales.length;
+			if (matches(locales[index])) {
+				e.preventDefault();
+				list[index]?.focus();
+				return;
+			}
 		}
 	};
 
