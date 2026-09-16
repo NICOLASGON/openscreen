@@ -1035,7 +1035,11 @@ export function useTimeline() {
 	 *  ruler, wrong here, where it would cut a clip the playhead is not even on.
 	 *
 	 *  Returns whether it split, so a caller can say nothing happened rather than leave a
-	 *  control that looks broken when the playhead sits on a boundary. */
+	 *  control that looks broken when the playhead sits on a boundary.
+	 *
+	 *  The document and the playhead are read from the store when this runs, not off the
+	 *  render closure, so the shell can queue it on `useSequentialTimelineOps` behind a save
+	 *  in flight and have it cut what that save committed. */
 	const splitClipAtPlayhead = useCallback(async (): Promise<boolean> => {
 		const doc = useProjectStore.getState().document;
 		if (!doc) return false;

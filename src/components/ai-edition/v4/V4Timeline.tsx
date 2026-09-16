@@ -572,6 +572,7 @@ export function V4Timeline({
 	onNextClip,
 	onEditClip,
 	onAddVoiceover,
+	onSplitClipAtPlayhead,
 }: {
 	tl: TimelineApi;
 	setCurrentTime: (sec: number) => void;
@@ -588,6 +589,11 @@ export function V4Timeline({
 	/** Opens the voiceover recorder. Shell-level like the clip editor: the
 	 *  dialog owns the microphone and the shell owns the transport. */
 	onAddVoiceover: () => void;
+	/** Cuts the clip under the playhead in two and resolves whether it did. The shell's,
+	 *  not `tl.splitClipAtPlayhead` called from here: a split is a read-modify-write of the
+	 *  whole document, so it has to wait its turn on the shell's write queue behind a save
+	 *  already in flight, or one of the two edits is lost. */
+	onSplitClipAtPlayhead: () => Promise<boolean>;
 }) {
 	const t = useScopedT("timeline");
 	// The live bindings, not the defaults: these keys are remappable, and a menu
@@ -1856,7 +1862,7 @@ export function V4Timeline({
 										// store itself so playback does not re-render the timeline 60
 										// times a second). So it always fires, and says when it did not
 										// split rather than looking broken.
-										void tl.splitClipAtPlayhead().then((didSplit) => {
+										void onSplitClipAtPlayhead().then((didSplit) => {
 											if (!didSplit) toast.info(t("toolbar.splitClipNothingToSplit"));
 										});
 									}}
