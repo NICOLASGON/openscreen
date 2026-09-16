@@ -1700,8 +1700,14 @@ export function NewEditorShell() {
 						tl={tl}
 						// Same queue the Edit modal's call site uses below: every document write
 						// is a read-modify-write of the whole document, so they all share one.
-						onApplyClipEdit={(clipId, sStart, sEnd) =>
-							void enqueueTimelineWrite(() => tl.applyClipEdit(clipId, sStart, sEnd))
+						// The range is resolved inside the chain, against the document the
+						// previous write committed, for the reason the hook's `enqueue` gives.
+						onApplyClipEdit={(clipId, resolveRange) =>
+							void enqueueTimelineWrite(async () => {
+								const doc = useProjectStore.getState().document;
+								const range = doc ? resolveRange(doc) : null;
+								if (range) await tl.applyClipEdit(clipId, range.start, range.end);
+							})
 						}
 						setCurrentTime={handleSeek}
 						variant={mode === "media" ? "media" : "edit"}

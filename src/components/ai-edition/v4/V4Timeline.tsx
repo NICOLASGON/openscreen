@@ -45,7 +45,7 @@ import {
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isGeneratedAssetId } from "@/lib/ai-edition/document/insertion";
 import { setUiProbeScrubbing } from "@/lib/ai-edition/perf/uiFrameProbe";
-import type { AxcutAudioTrack, AxcutClip } from "@/lib/ai-edition/schema";
+import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { audioGainScalar } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useTimelineTranscriptGate } from "@/lib/ai-edition/store/transcriptionStore";
@@ -198,6 +198,63 @@ function clipOutPointSec(clip: AxcutClip): number {
 		clip.sourceEndSec ??
 		clip.sourceStartSec + Math.max(0, clip.timelineEndSec - clip.timelineStartSec)
 	);
+}
+
+/** A clip's source range, as an edge trim hands it to `applyClipEdit`. */
+type ClipSourceRange = { start: number; end: number };
+
+/** Where one edge of `clip` lands when moved by `shiftSec` of source time, held inside
+ *  the media and above the minimum length. The upper bound is the one the Edit modal
+ *  computes, and for the same reason: it has to hold the current selection whatever the
+ *  metadata says, so it falls back to the out-point. An asset whose duration has not
+ *  been probed can therefore be trimmed in but not pulled back out, which is the safe
+ *  way round, since the alternative invents footage past the end of the file. */
+function clampedEdgeRange(
+	clip: AxcutClip,
+	assetDurationSec: number | undefined,
+	edge: "start" | "end",
+	shiftSec: number,
+): ClipSourceRange {
+	const fromStart = clip.sourceStartSec;
+	const fromEnd = clipOutPointSec(clip);
+	const sourceDurationSec = Math.max(assetDurationSec ?? 0, fromEnd, 0.001);
+	return edge === "start"
+		? {
+				start: Math.min(Math.max(fromStart + shiftSec, 0), fromEnd - MIN_CLIP_SEC),
+				end: fromEnd,
+			}
+		: {
+				start: fromStart,
+				end: Math.max(Math.min(fromEnd + shiftSec, sourceDurationSec), fromStart + MIN_CLIP_SEC),
+			};
+}
+
+/** An edge move, resolved against whatever document the write queue holds when it gets
+ *  to it, not against the render the gesture happened in. The queue serialises writes,
+ *  but a range computed at call time is fixed at call time: a held arrow key enqueues
+ *  thirty of them from the same stale clip, all naming the same range, which lost every
+ *  step but one and still pushed an undo step per save. Resolving inside the task makes
+ *  each step build on the one before it.
+ *
+ *  Null when there is nothing to write: the clip is gone, or the move lands on the range
+ *  it already has (against a stop). That is checked here too, and for the same reason:
+ *  the render-time clip cannot say whether the queued steps ahead of this one have
+ *  already reached the stop. */
+function resolveEdgeShift(
+	clipId: string,
+	edge: "start" | "end",
+	shiftSec: number,
+): (doc: AxcutDocument) => ClipSourceRange | null {
+	return (doc) => {
+		const clip = doc.timeline.clips.find((c) => c.id === clipId);
+		if (!clip) return null;
+		const assetDurationSec = doc.assets.find((a) => a.id === clip.assetId)?.durationSec;
+		const next = clampedEdgeRange(clip, assetDurationSec, edge, shiftSec);
+		const moved =
+			Math.abs(next.start - clip.sourceStartSec) > 0.001 ||
+			Math.abs(next.end - clipOutPointSec(clip)) > 0.001;
+		return moved ? next : null;
+	};
 }
 /**
  * Shortest region a resize may leave behind — the storage grid itself (regions
@@ -605,14 +662,21 @@ export function V4Timeline({
 	/** Opens the voiceover recorder. Shell-level like the clip editor: the
 	 *  dialog owns the microphone and the shell owns the transport. */
 	onAddVoiceover: () => void;
-	/** Commits an edge trim. NOT `tl.applyClipEdit` directly: that reads the document at
-	 *  call time and saves it back, so two calls in flight both build on the same pre-trim
-	 *  document and the second clobbers the first. A drag commits once, but the keyboard
-	 *  nudge fires per keydown and a held arrow repeats about thirty times a second. The
-	 *  shell owns the one queue every document write shares (`useSequentialTimelineOps`),
-	 *  and hands it down already wrapped — the Edit modal's own call site has always gone
-	 *  through it. */
-	onApplyClipEdit: (clipId: string, sourceStartSec: number, sourceEndSec: number) => void;
+	/** Commits an edge trim. The shell owns the one queue every document write shares
+	 *  (`useSequentialTimelineOps`), and this has to go through it: `tl.applyClipEdit`
+	 *  reads the document and saves it back, so two calls in flight would both build on
+	 *  the same pre-trim document and the second would clobber the first.
+	 *
+	 *  The queue orders the writes, but it cannot fix a value computed before the task
+	 *  ran, so the range is NOT passed in. `resolveRange` is called inside the queued task
+	 *  with the document as the previous write left it, and answers the range to save, or
+	 *  null to save nothing. A keyboard nudge fires per keydown and a held arrow repeats
+	 *  about thirty times a second, all from the same render: resolved at call time they
+	 *  all named the same range. */
+	onApplyClipEdit: (
+		clipId: string,
+		resolveRange: (doc: AxcutDocument) => { start: number; end: number } | null,
+	) => void;
 }) {
 	const t = useScopedT("timeline");
 	// The live bindings, not the defaults: these keys are remappable, and a menu
@@ -1481,16 +1545,16 @@ export function V4Timeline({
 
 			const fromStart = clip.sourceStartSec;
 			const fromEnd = clipOutPointSec(clip);
-			// The same bound the Edit modal computes, and for the same reason: it has
-			// to hold the current selection whatever the metadata says, so it falls
-			// back to the out-point. An asset whose duration has not been probed can
-			// therefore be trimmed in but not pulled back out — which is the safe way
-			// round, since the alternative invents footage past the end of the file.
-			const asset = tl.assets.find((a) => a.id === clip.assetId);
-			const sourceDurationSec = Math.max(asset?.durationSec ?? 0, fromEnd, 0.001);
+			const assetDurationSec = tl.assets.find((a) => a.id === clip.assetId)?.durationSec;
 
 			const startX = e.clientX;
-			let next = { start: fromStart, end: fromEnd };
+			// How far the dragged edge has moved in source time, clamped against the clip as
+			// it was pressed. What is committed is this MOVE, not the range it produced here:
+			// the preview draws the committed length plus the change, so if the document
+			// moves under the drag (an undo with the pointer still down, or a queued write
+			// landing), the move applied to that newer clip is exactly what is on screen at
+			// release. The absolute range would put back whatever the drag started from.
+			let shiftSec = 0;
 			setEdgeTrim({ id: clip.id, edge, deltaSec: 0 });
 
 			// The listeners sit on `window`, which hears every pointer on the device, not
@@ -1504,19 +1568,8 @@ export function V4Timeline({
 			const move = (moveEvent: PointerEvent) => {
 				if (!ours(moveEvent)) return;
 				const deltaSec = (moveEvent.clientX - startX) / pxPerSec;
-				next =
-					edge === "start"
-						? {
-								start: Math.min(Math.max(fromStart + deltaSec, 0), fromEnd - MIN_CLIP_SEC),
-								end: fromEnd,
-							}
-						: {
-								start: fromStart,
-								end: Math.max(
-									Math.min(fromEnd + deltaSec, sourceDurationSec),
-									fromStart + MIN_CLIP_SEC,
-								),
-							};
+				const next = clampedEdgeRange(clip, assetDurationSec, edge, deltaSec);
+				shiftSec = edge === "start" ? next.start - fromStart : next.end - fromEnd;
 				setEdgeTrim({
 					id: clip.id,
 					edge,
@@ -1536,10 +1589,11 @@ export function V4Timeline({
 				detach();
 				setEdgeTrim(null);
 				// A press that never moved is not an edit, and writing one would put an
-				// empty step on the undo stack.
-				const moved =
-					Math.abs(next.start - fromStart) > 0.001 || Math.abs(next.end - fromEnd) > 0.001;
-				if (moved) onApplyClipEdit(clip.id, next.start, next.end);
+				// empty step on the undo stack. (The resolver also refuses a move that
+				// lands on the range the clip already has; this just skips the queue.)
+				if (Math.abs(shiftSec) > 0.001) {
+					onApplyClipEdit(clip.id, resolveEdgeShift(clip.id, edge, shiftSec));
+				}
 			};
 
 			// The browser takes the pointer away on a palm rejection, a system gesture, or
@@ -1574,35 +1628,19 @@ export function V4Timeline({
 	 *  stop and then does nothing with it. Shift for a coarse second, otherwise a
 	 *  tenth, which is the precision the duration readouts are printed at. */
 	const nudgeEdge = useCallback(
-		(clip: AxcutClip, edge: "start" | "end", stepSec: number) => {
+		(clipId: string, edge: "start" | "end", stepSec: number) => {
 			// A grip keeps DOM focus through a drag on it (the pointerdown preventDefault
-			// leaves focus where it was), so an arrow key can land mid-drag. The drag's
-			// pending range was computed from a snapshot this write is about to invalidate,
-			// so it has to stop being pending rather than commit over the nudge on release.
+			// leaves focus where it was), so an arrow key can land mid-drag. Two edits of
+			// the same edge from one hand at once have no sensible merge, so the key wins
+			// and the drag stops being pending rather than committing on release.
 			abortEdgeTrimRef.current?.();
-			const fromStart = clip.sourceStartSec;
-			const fromEnd = clipOutPointSec(clip);
-			const asset = tl.assets.find((a) => a.id === clip.assetId);
-			const sourceDurationSec = Math.max(asset?.durationSec ?? 0, fromEnd, 0.001);
-			const next =
-				edge === "start"
-					? {
-							start: Math.min(Math.max(fromStart + stepSec, 0), fromEnd - MIN_CLIP_SEC),
-							end: fromEnd,
-						}
-					: {
-							start: fromStart,
-							end: Math.max(
-								Math.min(fromEnd + stepSec, sourceDurationSec),
-								fromStart + MIN_CLIP_SEC,
-							),
-						};
-			// Already against the stop: no document write, so holding the key down at
-			// the end of the source does not pile identical steps onto the undo stack.
-			if (Math.abs(next.start - fromStart) < 0.001 && Math.abs(next.end - fromEnd) < 0.001) return;
-			onApplyClipEdit(clip.id, next.start, next.end);
+			// A step, not a range: the render this key landed in may be several queued
+			// steps behind, so the range is worked out in the queue. Against the stop the
+			// resolver answers null and nothing is saved, so holding the key down at the
+			// end of the source does not pile identical steps onto the undo stack.
+			onApplyClipEdit(clipId, resolveEdgeShift(clipId, edge, stepSec));
 		},
-		[tl, onApplyClipEdit],
+		[onApplyClipEdit],
 	);
 
 	/** Where the trimmed clip sits, so the clips after it know to slide with it. */
@@ -2493,7 +2531,7 @@ export function V4Timeline({
 														e.preventDefault();
 														e.stopPropagation();
 														nudgeEdge(
-															c,
+															c.id,
 															"start",
 															(e.shiftKey ? 1 : 0.1) * (e.key === "ArrowLeft" ? -1 : 1),
 														);
@@ -2517,7 +2555,7 @@ export function V4Timeline({
 														e.preventDefault();
 														e.stopPropagation();
 														nudgeEdge(
-															c,
+															c.id,
 															"end",
 															(e.shiftKey ? 1 : 0.1) * (e.key === "ArrowLeft" ? -1 : 1),
 														);

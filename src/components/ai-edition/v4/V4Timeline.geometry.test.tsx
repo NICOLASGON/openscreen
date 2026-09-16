@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { Profiler, type ProfilerOnRenderCallback } from "react";
+import { type ComponentProps, Profiler, type ProfilerOnRenderCallback } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The regression under test is geometric, so the environment has to have a size:
@@ -25,9 +25,12 @@ vi.mock("@/hooks/useAudioPeaks", () => ({ useAudioPeaks: () => null }));
 const measureText = vi.fn((text: string) => ({ width: text.length * 6 }));
 
 import { ShortcutsProvider } from "@/contexts/ShortcutsContext";
+import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { DEFAULT_SHORTCUTS, formatBinding } from "@/lib/shortcuts";
 import { V4Timeline } from "./V4Timeline";
+
+type OnApplyClipEdit = ComponentProps<typeof V4Timeline>["onApplyClipEdit"];
 
 beforeAll(() => {
 	globalThis.ResizeObserver = class {
@@ -106,7 +109,7 @@ function renderTimeline(
 	onRender?: ProfilerOnRenderCallback,
 	/** Overrides for the props the shell owns. Only the write callback needs it so far:
 	 *  a test that wants to see WHERE the commit goes has to be handed its own spy. */
-	overrides: { onApplyClipEdit?: (id: string, s: number, e: number) => void } = {},
+	overrides: { onApplyClipEdit?: OnApplyClipEdit } = {},
 ) {
 	const tl = {
 		clips,
@@ -138,6 +141,20 @@ function renderTimeline(
 			/* the edge trim only awaits it */
 		}),
 	};
+	// A stand-in for the shell's write queue, faithful in the one way the trim depends on:
+	// the range is resolved when the write runs, against the document the previous write
+	// left, and the save lands in that document. The rendered `tl` above never re-renders,
+	// which is the point: every keydown lands in the same stale render, as the repeats of
+	// a held key do. Clips are copied so a test mutating the document leaves its fixtures be.
+	const shellDoc = { timeline: { clips: clips.map((c) => ({ ...c })) }, assets };
+	const applyThroughShell: OnApplyClipEdit = (clipId, resolveRange) => {
+		const range = resolveRange(shellDoc as unknown as AxcutDocument);
+		if (!range) return;
+		shellDoc.timeline.clips = shellDoc.timeline.clips.map((c) =>
+			c.id === clipId ? { ...c, sourceStartSec: range.start, sourceEndSec: range.end } : c,
+		);
+		void tl.applyClipEdit(clipId, range.start, range.end);
+	};
 	const setCurrentTime = vi.fn();
 	const timeline = (
 		<ShortcutsProvider>
@@ -151,11 +168,7 @@ function renderTimeline(
 				onPrevClip={vi.fn()}
 				onNextClip={vi.fn()}
 				onEditClip={vi.fn()}
-				// The shell wraps this in its write queue; here it goes straight to the mock,
-				// so the assertions below read the range the component asked to commit.
-				onApplyClipEdit={
-					overrides.onApplyClipEdit ?? ((clipId, s, e) => void tl.applyClipEdit(clipId, s, e))
-				}
+				onApplyClipEdit={overrides.onApplyClipEdit ?? applyThroughShell}
 				onAddVoiceover={vi.fn()}
 			/>
 		</ShortcutsProvider>
@@ -173,6 +186,7 @@ function renderTimeline(
 		pill: screen.getByTitle("toolbar.newAnnotation"),
 		clipEls: Array.from(document.querySelectorAll<HTMLElement>("[data-clip-id]")),
 		tl,
+		shellDoc,
 		setCurrentTime,
 		// A drag keeps its listeners on `window`, so a test can outlive the component
 		// on purpose and see what the gesture does without one.
@@ -896,7 +910,57 @@ describe("V4Timeline clip edge trim", () => {
 		fireEvent.keyDown(grip, { key: "ArrowLeft" });
 		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
 		fireEvent.keyDown(grip, { key: "ArrowLeft", shiftKey: true });
-		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799);
+		expect(tl.applyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1798.9);
+	});
+
+	const committedEnds = (tl: { applyClipEdit: { mock: { calls: unknown[][] } } }) =>
+		tl.applyClipEdit.mock.calls.map((call) => call[2] as number);
+
+	// A held arrow repeats about thirty times a second, far faster than a save comes back
+	// and the row re-renders, so every repeat lands in the same stale render. Each step has
+	// to build on the one the queue committed before it: computed from the render, all of
+	// them named the same range, and a held key moved the edge a tenth however long it
+	// was held while still pushing an undo step per repeat.
+	it("builds each repeat of a held arrow on the step before it, not on the render", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		const ends = committedEnds(tl);
+		expect(ends).toHaveLength(3);
+		expect(ends[0]).toBeCloseTo(1799.9, 6);
+		expect(ends[1]).toBeCloseTo(1799.8, 6);
+		expect(ends[2]).toBeCloseTo(1799.7, 6);
+	});
+
+	// "Against the stop" is a fact about the document, not the render. From the render, the
+	// step back out after a nudge in looked like a no-op (the render still ends at the file's
+	// end) and was dropped, while a step past the stop would have been written.
+	it("judges the stop against the latest document, and saves nothing past it", () => {
+		const { clipEls, tl } = renderTimeline();
+		const grip = gripFor(clipEls[0], "end");
+		fireEvent.keyDown(grip, { key: "ArrowLeft" });
+		fireEvent.keyDown(grip, { key: "ArrowRight" });
+		fireEvent.keyDown(grip, { key: "ArrowRight" });
+		const ends = committedEnds(tl);
+		expect(ends).toHaveLength(2);
+		expect(ends[0]).toBeCloseTo(1799.9, 6);
+		expect(ends[1]).toBeCloseTo(1800, 6);
+	});
+
+	// The document can change under a drag that is still held: Ctrl+Z with the pointer
+	// down, or a queued write landing. The preview is the committed length plus the move,
+	// so the move is what gets committed, applied to the clip as it is at release. The
+	// range the drag worked out at pointerdown would put the undone trim back.
+	it("commits a drag's move against the clip as it is on release", () => {
+		const { clipEls, tl, shellDoc } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0, pointerId: 1 });
+		window.dispatchEvent(pointerEvent("pointermove", -100, 1));
+		shellDoc.timeline.clips[0] = { ...shellDoc.timeline.clips[0], sourceEndSec: 1000 };
+		window.dispatchEvent(pointerEvent("pointerup", -100, 1));
+		expect(tl.applyClipEdit).toHaveBeenCalledTimes(1);
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 800);
 	});
 
 	// `sourceEndSec` is optional in the schema — an unprobed asset carries none — and
@@ -1036,16 +1100,22 @@ describe("V4Timeline clip edge trim", () => {
 	// pre-trim document -- a held arrow key repeats about thirty times a second, which is
 	// exactly how you get two.
 	it("commits through the shell's write callback, not straight at the timeline api", () => {
-		const onApplyClipEdit = vi.fn();
-		const { clipEls, tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+		const onApplyClipEdit = vi.fn<OnApplyClipEdit>();
+		const { clipEls, tl, shellDoc } = renderTimeline(undefined, undefined, undefined, undefined, {
 			onApplyClipEdit,
 		});
+		// What the callback is handed is resolved by the shell, inside its queue.
+		const resolvedLast = () =>
+			onApplyClipEdit.mock.lastCall?.[1](shellDoc as unknown as AxcutDocument);
+
 		dragHandle(gripFor(clipEls[0], "end"), -100);
-		expect(onApplyClipEdit).toHaveBeenCalledWith("c@0", 0, 1600);
+		expect(onApplyClipEdit).toHaveBeenCalledWith("c@0", expect.any(Function));
+		expect(resolvedLast()).toEqual({ start: 0, end: 1600 });
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 
 		fireEvent.keyDown(gripFor(clipEls[0], "end"), { key: "ArrowLeft" });
-		expect(onApplyClipEdit).toHaveBeenLastCalledWith("c@0", 0, 1799.9);
+		expect(onApplyClipEdit).toHaveBeenLastCalledWith("c@0", expect.any(Function));
+		expect(resolvedLast()).toEqual({ start: 0, end: 1799.9 });
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 	});
 
