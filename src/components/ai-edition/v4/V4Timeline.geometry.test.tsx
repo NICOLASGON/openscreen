@@ -641,6 +641,18 @@ describe("V4Timeline audio lane drag", () => {
 		expect(onAddVoiceover).toHaveBeenCalledTimes(1);
 	});
 
+	// The library is not a dialog of its own: the entry hands over to the shell, which
+	// reveals the inspector's audio facet. The menu has to get out of the way for that.
+	it("opens the music library from the same menu, and closes the menu", () => {
+		const onOpenMusicLibrary = vi.fn();
+		renderAudio({}, { onOpenMusicLibrary });
+		fireEvent.click(screen.getByLabelText("toolbar.addAudioTooltip"));
+		fireEvent.click(screen.getByText("audio.musicLibrary"));
+		expect(onOpenMusicLibrary).toHaveBeenCalledTimes(1);
+		expect(screen.queryByText("audio.musicLibrary")).toBeNull();
+		expect(screen.queryByText("audio.addVoiceover")).toBeNull();
+	});
+
 	it("teaches the key that does the same thing", () => {
 		// Read off the live bindings rather than hardcoded here, so a rebind in the
 		// shortcuts dialog moves the menu with it instead of teaching a stale key.
