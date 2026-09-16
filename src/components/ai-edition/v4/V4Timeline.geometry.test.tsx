@@ -218,8 +218,9 @@ function dragHandle(handle: Element, dxPx: number, pointerId = 0) {
  *  Takes the target element so a test can prove the listener isn't confined to the
  *  lanes — it fires from wherever in the pane the cursor happens to be. */
 function wheelZoomOn(el: HTMLElement, notches: number) {
-	for (let i = 0; i < notches; i++) {
-		fireEvent.wheel(el, { ctrlKey: true, deltaY: -100, clientX: 0 });
+	// Negative notches zoom back out.
+	for (let i = 0; i < Math.abs(notches); i++) {
+		fireEvent.wheel(el, { ctrlKey: true, deltaY: notches < 0 ? 100 : -100, clientX: 0 });
 	}
 }
 function zoomIn(notches: number) {
@@ -924,6 +925,46 @@ describe("V4Timeline clip edge trim", () => {
 		const { clipEls } = renderTimeline([clip(0, 1790), clip(1790, 1800)]);
 		expect(gripsOf(clipEls[0])).toHaveLength(2);
 		expect(gripsOf(clipEls[1])).toHaveLength(0);
+	});
+
+	// Whether a card is wide enough for grips is decided by a width that changes under the
+	// grip in use: a nudge shortens the clip, a Ctrl+wheel zooms the row. Unmounting the
+	// focused grip dropped focus to the body mid-edit. Zoomed in, the short clip has room
+	// for grips; zoomed back out it has not, and the one holding focus has to survive.
+	it("keeps a focused grip mounted when its card narrows under it", () => {
+		const { clipEls } = renderTimeline([clip(0, 1750), clip(1750, 1800)]);
+		expect(gripsOf(clipEls[1])).toHaveLength(0);
+		zoomIn(40);
+		const grip = gripFor(clipEls[1], "end");
+		act(() => {
+			grip.focus();
+		});
+		wheelZoomOn(document.querySelector("[class*=tlTracks]") as HTMLElement, -40);
+		expect(grip.isConnected).toBe(true);
+		expect(document.activeElement).toBe(grip);
+
+		// Moving to the other grip of the same card keeps both; leaving the card lets them go.
+		const other = gripFor(clipEls[1], "start");
+		act(() => {
+			other.focus();
+		});
+		expect(document.activeElement).toBe(other);
+		act(() => {
+			other.blur();
+		});
+		expect(gripsOf(clipEls[1])).toHaveLength(0);
+	});
+
+	// A grip is a button, which carries no value, so a nudge changes nothing a screen
+	// reader hears. A polite live region says the length while a grip has focus.
+	it("speaks the clip's length while one of its grips has focus", () => {
+		const { clipEls } = renderTimeline([clip(0, 900)]);
+		const live = () => clipEls[0].querySelector('[aria-live="polite"]');
+		expect(live()).toBeNull();
+		act(() => {
+			gripFor(clipEls[0], "end").focus();
+		});
+		expect(live()?.textContent).toBe("15:00.0");
 	});
 
 	// The grips are focusable buttons, so they owe the keyboard an answer.

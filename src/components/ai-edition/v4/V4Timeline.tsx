@@ -739,6 +739,12 @@ export function V4Timeline({
 	 *  clip that loses half a second pulls everything after it half a second left.
 	 *  Held apart from the committed document so the drag can be abandoned. */
 	const [edgeTrim, setEdgeTrim] = useState<EdgeTrimPreview | null>(null);
+	/** The clip whose trim grip holds keyboard focus. A card too narrow for grips does not
+	 *  render them, and the width that decides it changes under the grip itself: a nudge
+	 *  shortens the clip, a Ctrl+wheel zooms the row out. Unmounting the focused button
+	 *  drops focus to the body, so a keyboard user nudging a clip down past the threshold
+	 *  lost their place mid-edit. The grips stay while focus is in them. */
+	const [gripFocusClipId, setGripFocusClipId] = useState<string | null>(null);
 	/** Calls off an edge trim still in flight. A drag holds its listeners on `window`, so
 	 *  it outlives this component — which the shell unmounts on its own schedule (it
 	 *  renders the timeline conditionally). Without this the closures survive the
@@ -2474,6 +2480,7 @@ export function V4Timeline({
 								// there is no arrangement that fits a button inside that — so while
 								// it is selected the controls step outside the box instead.
 								const narrow = boxLen * pxPerSec < NARROW_CLIP_PX;
+								const gripFocused = gripFocusClipId === c.id;
 								// The gutter is taken out of the card's own width below, so the
 								// room the label actually has is that much less than the span.
 								// From `boxLen`, not the committed length: during a drag the card is
@@ -2504,6 +2511,18 @@ export function V4Timeline({
 											transform: clipTransform,
 										}}
 										onPointerDown={(e) => startClipDrag(e, c)}
+										// Focus-within, but only once it started on a grip: moving on to
+										// this card's delete button keeps the grips (it is the same card),
+										// and leaving the card lets them go.
+										onFocus={(e) => {
+											if (e.target instanceof HTMLElement && e.target.dataset.edge) {
+												setGripFocusClipId(c.id);
+											}
+										}}
+										onBlur={(e) => {
+											if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+											setGripFocusClipId((current) => (current === c.id ? null : current));
+										}}
 										onClick={(e) => {
 											e.stopPropagation();
 											// A completed reorder-drag also fires a click; don't let it
@@ -2530,8 +2549,10 @@ export function V4Timeline({
 										{/* Only on a card wide enough to hold them. Below that the two grips
 										    would cover the whole clip and leave no body to grab for a reorder —
 										    the pencil (and the Edit modal behind it) stays the way in at that
-										    size, the same bargain the other in-clip controls strike. */}
-										{narrow ? null : (
+										    size, the same bargain the other in-clip controls strike. Except
+										    while one is in use: a card that narrows under a drag or a nudge
+										    keeps the grip the user is holding. */}
+										{narrow && !trimming && !gripFocused ? null : (
 											<>
 												<button
 													type="button"
@@ -2584,6 +2605,17 @@ export function V4Timeline({
 													onClick={(e) => e.stopPropagation()}
 													onDoubleClick={(e) => e.stopPropagation()}
 												/>
+												{/* The grips are buttons, which carry no value of their own, so a
+												    screen reader hears nothing change on a nudge. The Edit modal
+												    speaks the same numbers through a polite live region; this is its
+												    counterpart, present only while a grip of this card has focus. It
+												    stays out of the card's width gate: the visible readout is hidden
+												    on a short card, and a short card is where the value matters. */}
+												{gripFocused ? (
+													<span className="sr-only" aria-live="polite" aria-atomic="true">
+														{durText}
+													</span>
+												) : null}
 											</>
 										)}
 										<div className={styles.tlClipLabel}>
