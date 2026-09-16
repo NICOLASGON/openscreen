@@ -183,6 +183,11 @@ function cardFitsDuration(cardPx: number, text: string): boolean {
 }
 
 const CLIP_GUTTER_PX = 6;
+/** How far a press on a clip has to travel before it counts as a drag, in screen px.
+ *  Shared by the reorder and the edge trim: below it a press is click jitter, and at a
+ *  low zoom one pixel of that is seconds of timeline, so a trim without it turned an
+ *  unsteady click into a real edit and an undo step. */
+const CLIP_DRAG_START_PX = 4;
 /** The shortest a clip may be left by a trim — the same floor the Edit modal's
  *  handles stop at, so the two ways into this edit agree on what "too short" is. */
 const MIN_CLIP_SEC = 0.05;
@@ -1555,6 +1560,10 @@ export function V4Timeline({
 			// landing), the move applied to that newer clip is exactly what is on screen at
 			// release. The absolute range would put back whatever the drag started from.
 			let shiftSec = 0;
+			// Nothing moves until the press has travelled far enough to be a drag, the same
+			// dead zone a reorder has; past it the move is measured from the press, not from
+			// the edge of the dead zone, so the grip does not lag the pointer by 4px.
+			let dragging = false;
 			setEdgeTrim({ id: clip.id, edge, deltaSec: 0 });
 
 			// The listeners sit on `window`, which hears every pointer on the device, not
@@ -1567,6 +1576,8 @@ export function V4Timeline({
 
 			const move = (moveEvent: PointerEvent) => {
 				if (!ours(moveEvent)) return;
+				if (!dragging && Math.abs(moveEvent.clientX - startX) < CLIP_DRAG_START_PX) return;
+				dragging = true;
 				const deltaSec = (moveEvent.clientX - startX) / pxPerSec;
 				const next = clampedEdgeRange(clip, assetDurationSec, edge, deltaSec);
 				shiftSec = edge === "start" ? next.start - fromStart : next.end - fromEnd;
@@ -1588,8 +1599,8 @@ export function V4Timeline({
 				if (!ours(endEvent)) return;
 				detach();
 				setEdgeTrim(null);
-				// A press that never moved is not an edit, and writing one would put an
-				// empty step on the undo stack. (The resolver also refuses a move that
+				// A press that never left the dead zone is not an edit, and writing one would
+				// put an empty step on the undo stack. (The resolver also refuses a move that
 				// lands on the range the clip already has; this just skips the queue.)
 				if (Math.abs(shiftSec) > 0.001) {
 					onApplyClipEdit(clip.id, resolveEdgeShift(clip.id, edge, shiftSec));
@@ -1704,7 +1715,7 @@ export function V4Timeline({
 			};
 
 			const move = (ev: PointerEvent) => {
-				if (!dragging && Math.abs(ev.clientX - startX) < 4) return;
+				if (!dragging && Math.abs(ev.clientX - startX) < CLIP_DRAG_START_PX) return;
 				dragging = true;
 				didClipDragRef.current = true;
 				const target = computeTarget(ev.clientX);

@@ -895,6 +895,29 @@ describe("V4Timeline clip edge trim", () => {
 		expect(tl.applyClipEdit).not.toHaveBeenCalled();
 	});
 
+	// At this zoom a pixel is two seconds, so the jitter of an ordinary click on a grip is
+	// several seconds of timeline. Without a dead zone that committed a real trim, and an
+	// undo step, from a press that was never meant as a drag.
+	it("writes nothing for a press that wobbles inside the drag dead zone", () => {
+		const { clipEls, tl } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0 });
+		window.dispatchEvent(pointerEvent("pointermove", -1));
+		window.dispatchEvent(pointerEvent("pointermove", -3));
+		window.dispatchEvent(pointerEvent("pointerup", -3));
+		expect(tl.applyClipEdit).not.toHaveBeenCalled();
+	});
+
+	// Past the dead zone the move counts from the press, so the edge does not trail the
+	// pointer by the width of the zone.
+	it("measures a drag from the press once it leaves the dead zone", () => {
+		const { clipEls, tl } = renderTimeline();
+		fireEvent.pointerDown(gripFor(clipEls[0], "end"), { clientX: 0 });
+		window.dispatchEvent(pointerEvent("pointermove", -3));
+		window.dispatchEvent(pointerEvent("pointermove", -10));
+		window.dispatchEvent(pointerEvent("pointerup", -10));
+		expect(tl.applyClipEdit).toHaveBeenCalledWith("c@0", 0, 1780);
+	});
+
 	// Two grips on a clip a few pixels wide would cover it entirely and leave no
 	// body to grab for a reorder. The pencil stays the way in at that size.
 	it("keeps its grips off a clip too narrow to hold them", () => {
