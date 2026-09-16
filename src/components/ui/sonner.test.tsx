@@ -75,3 +75,28 @@ describe("close button placement contract", () => {
 		});
 	}
 });
+
+// jsdom does not cascade, so it cannot show which rule wins. What it can pin is where the
+// colours live: sonner's dark theme sets the button's colour at (0,4,0), so a colour passed
+// as a Tailwind utility through `classNames` (0,3,0) silently never applies, and the one
+// place that does apply is the `html`-prefixed override in src/index.css.
+describe("close button colours", () => {
+	const root = path.resolve(__dirname, "..", "..", "..");
+	const appCss = readFileSync(path.join(root, "src/index.css"), "utf8");
+	const closeRule = (suffix: string) => {
+		const selector = `html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button]${suffix} {`;
+		const start = appCss.indexOf(selector);
+		expect(start, selector).toBeGreaterThanOrEqual(0);
+		return appCss.slice(start, appCss.indexOf("}", start));
+	};
+
+	it("sets the resting and hover colour in the override that outranks sonner", () => {
+		expect(closeRule("")).toMatch(/^\s*color:/m);
+		expect(closeRule(":hover")).toMatch(/^\s*color:/m);
+	});
+
+	it("does not pass them through classNames, where they lose", () => {
+		const toaster = readFileSync(path.join(root, "src/components/ui/sonner.tsx"), "utf8");
+		expect(toaster).not.toMatch(/closeButton:\s*"/);
+	});
+});

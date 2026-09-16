@@ -368,14 +368,24 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
 
 /* Inside the box, the chrome sonner gives the button stops making sense: a bordered,
    opaque chip reads as a badge stuck on the corner when it is overhanging, and as a second
-   surface floating on the toast when it is not. Plain icon, weight on hover only. */
+   surface floating on the toast when it is not. Plain icon, weight on hover only.
+
+   The colours are here and not in the Toaster's `classNames`, because from there they
+   never applied: sonner's dark theme sets the button's colour at (0,4,0), which a
+   Tailwind `group-[.toast]:` utility at (0,3,0) cannot beat. The leading `html` puts this
+   rule at (0,4,1). Slate, like the toast's own text: at rest the description's 400, so
+   the cross stays quieter than the title, and 100 on hover.
+   There is no light variant to cover: the Toaster is always `theme="dark"`, on a fixed
+   near-black surface. */
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button] {
 	top: 8px;
 	border-color: transparent;
 	background: transparent;
+	color: theme("colors.slate.400");
 	transition: background 0.12s ease-out, color 0.12s ease-out;
 }
 
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button]:hover {
 	background: rgb(255 255 255 / 10%);
+	color: theme("colors.slate.100");
 }

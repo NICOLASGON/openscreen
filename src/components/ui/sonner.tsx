@@ -17,8 +17,9 @@ const Toaster = ({ className, ...props }: ToasterProps) => {
 			// A toast that can only be waited out is the one case where the 3s timer works
 			// against the reader: an error with a long description is dismissed before it is
 			// finished, and a stack of them hides the editor with no way to clear it. The
-			// cross is placed on the END side by `src/index.css` — sonner puts it on the
-			// start side, which is not where anything else in this app closes.
+			// cross is placed on the END side and coloured by `src/index.css`: sonner puts it
+			// on the start side, which is not where anything else in this app closes, and
+			// its dark theme outranks any colour utility passed through `classNames`.
 			closeButton
 			toastOptions={{
 				// Sonner's default is the untranslated "Close toast"; the rest of the app
@@ -30,10 +31,6 @@ const Toaster = ({ className, ...props }: ToasterProps) => {
 					description: "group-[.toast]:text-slate-400",
 					actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
 					cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
-					// The button's colours live in src/index.css with its placement: sitting
-					// inside the toast, the two are one decision, and splitting them across a
-					// class list and a stylesheet is how they drift.
-					closeButton: "group-[.toast]:text-slate-400 group-[.toast]:hover:text-slate-100",
 				},
 			}}
 			{...props}
