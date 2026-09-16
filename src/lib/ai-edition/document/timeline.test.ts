@@ -2075,4 +2075,46 @@ describe("splitClipAt", () => {
 		expect(out.timeline.clips[0].wordRefs).toEqual(["w_head"]);
 		expect(out.timeline.clips[1].wordRefs).toEqual(["w_tail"]);
 	});
+
+	// `replaceTimeline` keeps a clip whose source window a kept interval reproduces, and it
+	// used to keep it field by field: id, origin, reason, word refs, and not the flag. The
+	// agent's `replace_timeline` and `drop_range` both land there, so a split went through
+	// them looking intact and came apart on the next structural edit, which folds the halves
+	// back into one clip.
+	it("survives an agent rebuild that keeps both halves, and the edit after it", () => {
+		const whole = makeDoc({
+			timeline: {
+				clips: [
+					makeClip({ id: "clip_1", sourceStartSec: 0, sourceEndSec: 60, timelineEndSec: 60 }),
+				],
+				gaps: [],
+				trimRanges: [],
+				muteRanges: [],
+				speedRanges: [],
+				captionRanges: [],
+			},
+		});
+		const once = splitClipAt(whole, "clip_1", 20);
+		const split = splitClipAt(once, once.timeline.clips[1].id, 40);
+		const rebuilt = replaceTimeline(
+			split,
+			[
+				{ startSec: 0, endSec: 20 },
+				{ startSec: 20, endSec: 40 },
+				{ startSec: 40, endSec: 60 },
+			],
+			"agent rebuild",
+			"agent",
+		);
+		expect(rebuilt.timeline.clips.map((c) => c.splitFromPrevious)).toEqual([undefined, true, true]);
+		// The edit that used to undo it: moving the last piece to the front makes the other
+		// two neighbours again, which is exactly what the fold looks for.
+		const lastId = rebuilt.timeline.clips[2].id;
+		const moved = moveClip(rebuilt, lastId, 0);
+		expect(moved.timeline.clips.map((c) => [c.sourceStartSec, c.sourceEndSec])).toEqual([
+			[40, 60],
+			[0, 20],
+			[20, 40],
+		]);
+	});
 });

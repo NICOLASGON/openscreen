@@ -830,7 +830,7 @@ export function planTimelineReplacement(
 }
 
 export interface ReplaceTimelineOptions {
-	/** Reuse the id / origin / reason / wordRefs of a clip whose source window a
+	/** Reuse the id / origin / reason / wordRefs / split flag of a clip whose source window a
 	 *  kept interval reproduces exactly. Default true — a rebuild that happens to
 	 *  keep a stretch of media keeps the clip that WAS that stretch of media. */
 	preserveIds?: boolean;
@@ -880,6 +880,9 @@ export function replaceTimeline(
 				collectWordRefs(document.transcript, slot.interval.startSec, slot.interval.endSec),
 			origin: existing?.origin ?? origin,
 			reason: existing?.reason ?? reason,
+			// A kept clip is the same stretch of media, so a cut the user put at its start is
+			// still there. Dropped, the next structural edit folds it into its neighbour.
+			...(existing?.splitFromPrevious ? { splitFromPrevious: true } : {}),
 		};
 	});
 
