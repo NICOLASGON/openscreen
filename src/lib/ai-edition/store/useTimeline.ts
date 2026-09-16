@@ -1026,31 +1026,6 @@ export function useTimeline() {
 		setSelectedAudioTrackId(null);
 	}, [setSelectedAudioTrackId]);
 
-	// The Edit Clip dialog's Apply, as ONE document and ONE save.
-	//
-	// Source range and crop are two edits made in a single user action, and they used to
-	// be two independent saves fired back to back. Both built their next document from
-	// the SAME pre-Apply one — the crop write never saw the source-range change — so
-	// whichever IPC write landed last silently dropped the other edit, with no error and
-	// no toast (#355). Composing them means the crop is applied to the *resequenced*
-	// clips, which is also the only order that can be right.
-	//
-	// Axcut-consistent clip trim: only the source range is user-editable (the dialog's
-	// draggable track). Changing it changes the clip's effective duration, so every clip
-	// is resequenced back-to-back afterward — same invariant as
-	// insertClipAt/moveClip/removeClip — instead of leaving downstream clips at their old
-	// timeline positions (which would overlap). That whole recipe (resequence width +
-	// clamp/rederive pills) lives in the one pure `setClipSourceRange`, shared with the op
-	// dispatcher and the LLM tool.
-	//
-	// Crop is a per-clip framing, not a document-wide setting — two clips (even from the
-	// same asset) can reasonably want different crops. `undefined` means the dialog's crop
-	// section was never touched (leave the stored value alone); `null` clears it back to
-	// "no crop" (full frame) rather than storing the identity region explicitly.
-	//
-	// The document is read from the store, not off the render closure, so this composes
-	// with `useSequentialTimelineOps`: queued behind another timeline write, it still sees
-	// what that write committed. Same reason as `setTrimEntries` / `insertClipAt`.
 	/** Cut the clip under the playhead in two, there.
 	 *
 	 *  The playhead runs on TIMELINE time and a clip is cut in its own MEDIA time, so the
@@ -1080,6 +1055,31 @@ export function useTimeline() {
 		return await saveDocument(next, { history: true });
 	}, [saveDocument]);
 
+	// The Edit Clip dialog's Apply, as ONE document and ONE save.
+	//
+	// Source range and crop are two edits made in a single user action, and they used to
+	// be two independent saves fired back to back. Both built their next document from
+	// the SAME pre-Apply one — the crop write never saw the source-range change — so
+	// whichever IPC write landed last silently dropped the other edit, with no error and
+	// no toast (#355). Composing them means the crop is applied to the *resequenced*
+	// clips, which is also the only order that can be right.
+	//
+	// Axcut-consistent clip trim: only the source range is user-editable (the dialog's
+	// draggable track). Changing it changes the clip's effective duration, so every clip
+	// is resequenced back-to-back afterward — same invariant as
+	// insertClipAt/moveClip/removeClip — instead of leaving downstream clips at their old
+	// timeline positions (which would overlap). That whole recipe (resequence width +
+	// clamp/rederive pills) lives in the one pure `setClipSourceRange`, shared with the op
+	// dispatcher and the LLM tool.
+	//
+	// Crop is a per-clip framing, not a document-wide setting — two clips (even from the
+	// same asset) can reasonably want different crops. `undefined` means the dialog's crop
+	// section was never touched (leave the stored value alone); `null` clears it back to
+	// "no crop" (full frame) rather than storing the identity region explicitly.
+	//
+	// The document is read from the store, not off the render closure, so this composes
+	// with `useSequentialTimelineOps`: queued behind another timeline write, it still sees
+	// what that write committed. Same reason as `setTrimEntries` / `insertClipAt`.
 	const applyClipEdit = useCallback(
 		async (
 			clipId: string,
