@@ -1692,7 +1692,7 @@ export function ChatStripPanel() {
  *  for REC, cut, skip and trim, and a fourth meaning would blunt it. */
 const CONTEXT_TIGHT_RATIO = 0.8;
 
-function ContextMeter({
+export function ContextMeter({
 	budget,
 	t,
 }: {
