@@ -60,10 +60,15 @@ file is the only provenance document a user receives.
 
 ## Packaging and path resolution
 
-`public/music` ships through `extraResources` (→ `resources/music/`), **not** only through
+`public/music` ships through `extraResources` (→ `resources/music/`), **not** through
 `dist`, for the same reason as `public/mediapipe`: the native compositor opens every audio
 track by absolute filesystem path (`SceneAudioTrack.path`), and a path inside `app.asar` is
 not one.
+
+Vite copies all of `public/` into `dist/` regardless, so `files` excludes `dist/music`;
+without that the audio ships twice, the asar copy never read. Nothing loads `/music/...` out
+of `dist/`: a packaged renderer is a `file://` load and `getAssetPath` resolves to
+`resources/`, and in dev the Vite server serves `public/` itself.
 
 Two IPC handlers, deliberately separate:
 

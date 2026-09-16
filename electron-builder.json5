@@ -71,6 +71,13 @@
   },
   "files": [
     "dist",
+    // Vite copies all of `public/` into `dist/`, so the music library would otherwise ship
+    // twice: once in app.asar, once in `extraResources` below. Only the second copy is ever
+    // read. The native compositor needs a real path, and the renderer auditions tracks through
+    // `getAssetPath`, which resolves to resources/ in a packaged app (file:// load) and to the
+    // Vite dev server's `public/` in dev. Nothing loads `/music/...` out of `dist/`. ~10 MB.
+    // (wallpapers, cursors and mediapipe are duplicated the same way; not addressed here.)
+    "!dist/music",
     "dist-electron",
     "!*.png",
     "!preview*.png",
