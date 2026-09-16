@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "Nepodařilo se aktualizovat úsilí uvažování",
 		"contextTooltip": "{{usedTokens}} / {{budgetTokens}} odhadovaných tokenů",
 		"contextPercent": "{{percent}}% kontextu",
+		"contextTight": "Kontext je téměř plný",
 		"compactContext": "Komprimovat kontext",
 		"aiSettings": "Nastavení AI",
 		"history": "Historie",

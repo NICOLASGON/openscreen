@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "추론 노력 수준을 업데이트할 수 없습니다",
 		"contextTooltip": "예상 토큰 {{usedTokens}} / {{budgetTokens}}",
 		"contextPercent": "컨텍스트 {{percent}}%",
+		"contextTight": "컨텍스트가 거의 가득 찼습니다",
 		"compactContext": "컨텍스트 압축",
 		"aiSettings": "AI 설정",
 		"history": "기록",

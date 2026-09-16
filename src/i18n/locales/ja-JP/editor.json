@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "推論の労力を更新できませんでした",
 		"contextTooltip": "推定トークン数 {{usedTokens}} / {{budgetTokens}}",
 		"contextPercent": "コンテキスト {{percent}}%",
+		"contextTight": "コンテキストがほぼいっぱいです",
 		"compactContext": "コンテキストを圧縮",
 		"aiSettings": "AI設定",
 		"history": "履歴",

@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "Akıl yürütme çabası güncellenemedi",
 		"contextTooltip": "{{usedTokens}} / {{budgetTokens}} tahmini belirteç",
 		"contextPercent": "%{{percent}} bağlam",
+		"contextTight": "Bağlam neredeyse dolu",
 		"compactContext": "Bağlamı sıkıştır",
 		"aiSettings": "Yapay zeka ayarları",
 		"history": "Geçmiş",

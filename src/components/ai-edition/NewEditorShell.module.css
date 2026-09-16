@@ -1317,13 +1317,15 @@
 	font-variant-numeric: tabular-nums;
 	color: var(--muted);
 }
+/* --warn-fg, not --warn: the glyph is what makes the state legible, so it has to
+   clear 3:1 itself (4.8:1 on --bg in light theme, where --warn was 2.1:1). */
 .ctxWarnIcon {
-	color: var(--warn);
+	color: var(--warn-fg);
 	flex-shrink: 0;
 }
 /* Past the threshold the ramp moves to the warning hue — and the glyph appears in
-   the same breath. --warn sits below 3:1 on this surface by design; the icon is
-   what makes the state legible without it, not a decoration beside it.
+   the same breath. The fill's --warn sits below 3:1 on this surface by design; the
+   icon is what makes the state legible without it, not a decoration beside it.
    The label deliberately stays --muted: amber text would be the least readable
    thing in the row, which is the trap the old mint pill fell into. */
 .ctxMeter[data-tight="true"] .ctxTrack {

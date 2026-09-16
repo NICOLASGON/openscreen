@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "Не удалось обновить уровень рассуждений",
 		"contextTooltip": "{{usedTokens}} / {{budgetTokens}} расчётных токенов",
 		"contextPercent": "{{percent}}% контекста",
+		"contextTight": "Контекст почти заполнен",
 		"compactContext": "Сжать контекст",
 		"aiSettings": "Настройки ИИ",
 		"history": "История",

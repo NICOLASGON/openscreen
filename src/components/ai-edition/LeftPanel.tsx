@@ -1684,14 +1684,21 @@ export function ChatStripPanel() {
  *  The fill and its track come from one ramp, and the colour now means something —
  *  mint while there is room, --warn past the point where the next few turns will start
  *  evicting history. Never colour alone: crossing the threshold also puts a glyph in
- *  the row, because the amber is below 3:1 on this surface by design and the pairing is
- *  what makes it legible.
+ *  the row, because the amber fill is below 3:1 on this surface by design and the
+ *  glyph, in the darker --warn-fg, is what makes it legible. The glyph is decorative to
+ *  a screen reader, so the same moment also adds the state in words ahead of the number.
  *
  *  It stops at --warn rather than escalating to red: this design system reserves red
  *  for REC, cut, skip and trim, and a fourth meaning would blunt it. */
 const CONTEXT_TIGHT_RATIO = 0.8;
 
-function ContextMeter({ budget, t }: { budget: ChatBudget; t: ReturnType<typeof useScopedT> }) {
+function ContextMeter({
+	budget,
+	t,
+}: {
+	budget: ChatBudget;
+	t: ReturnType<typeof useScopedT>;
+}) {
 	const percent = Math.min(100, Math.round(budget.ratio * 100));
 	const tight = budget.ratio >= CONTEXT_TIGHT_RATIO;
 	return (
@@ -1708,7 +1715,12 @@ function ContextMeter({ budget, t }: { budget: ChatBudget; t: ReturnType<typeof 
 			<span className={styles.ctxTrack} aria-hidden>
 				<span className={styles.ctxFill} style={{ width: `${percent}%` }} />
 			</span>
-			{tight ? <TriangleAlert size={11} className={styles.ctxWarnIcon} aria-hidden /> : null}
+			{tight ? (
+				<>
+					<TriangleAlert size={11} className={styles.ctxWarnIcon} aria-hidden />
+					<span className="sr-only">{t("chat.contextTight")}</span>
+				</>
+			) : null}
 			<span className={styles.ctxLabel}>{t("chat.contextPercent", { percent })}</span>
 		</span>
 	);

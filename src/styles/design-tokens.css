@@ -93,6 +93,11 @@
 	--danger-wash: rgba(239, 68, 68, 0.06);
 	--danger-hatch: rgba(239, 68, 68, 0.32);
 	--warn: #f59e0b;
+	/* --warn is a fill and wash hue: amber is 2.1:1 on --bg in light theme, so a
+	   glyph or a word that has to carry the warning on its own takes --warn-fg,
+	   the same amber darkened until it clears 3:1 for graphics and AA for text
+	   (4.8:1 on --bg). Dark theme needs no darker step and keeps --warn. */
+	--warn-fg: #b45309;
 	--warn-soft: rgba(245, 158, 11, 0.12);
 
 	/* timeline pills */
@@ -226,6 +231,7 @@
 	--danger-hatch: rgba(248, 113, 113, 0.40);
 
 	--warn: #fbbf24;
+	--warn-fg: #fbbf24;
 	--warn-soft: rgba(251, 191, 36, 0.14);
 
 	--annotation: #fbbf24;

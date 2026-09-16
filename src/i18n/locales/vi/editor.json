@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "Không thể cập nhật mức độ suy luận",
 		"contextTooltip": "{{usedTokens}} / {{budgetTokens}} token ước tính",
 		"contextPercent": "{{percent}}% ngữ cảnh",
+		"contextTight": "Ngữ cảnh gần đầy",
 		"compactContext": "Nén ngữ cảnh",
 		"aiSettings": "Cài đặt AI",
 		"history": "Lịch sử",

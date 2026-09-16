@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "Impossible de mettre à jour l'effort de raisonnement",
 		"contextTooltip": "{{usedTokens}} / {{budgetTokens}} jetons estimés",
 		"contextPercent": "{{percent}}% du contexte",
+		"contextTight": "Contexte presque plein",
 		"compactContext": "Compacter le contexte",
 		"aiSettings": "Réglages IA",
 		"history": "Historique",

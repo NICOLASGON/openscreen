@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "Could not update reasoning effort",
 		"contextTooltip": "{{usedTokens}} / {{budgetTokens}} estimated tokens",
 		"contextPercent": "{{percent}}% context",
+		"contextTight": "Context nearly full",
 		"compactContext": "Compact context",
 		"aiSettings": "AI settings",
 		"history": "History",

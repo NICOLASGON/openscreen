@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "Impossibile aggiornare lo sforzo di ragionamento",
 		"contextTooltip": "{{usedTokens}} / {{budgetTokens}} token stimati",
 		"contextPercent": "{{percent}}% di contesto",
+		"contextTight": "Contesto quasi pieno",
 		"compactContext": "Comprimi contesto",
 		"aiSettings": "Impostazioni IA",
 		"history": "Cronologia",

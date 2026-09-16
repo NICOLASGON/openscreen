@@ -240,6 +240,7 @@
 		"reasoningEffortUpdateFailed": "無法更新推理強度",
 		"contextTooltip": "預估 {{usedTokens}} / {{budgetTokens}} 個權杖",
 		"contextPercent": "上下文 {{percent}}%",
+		"contextTight": "上下文即將用滿",
 		"compactContext": "壓縮上下文",
 		"aiSettings": "AI 設定",
 		"history": "歷史紀錄",
