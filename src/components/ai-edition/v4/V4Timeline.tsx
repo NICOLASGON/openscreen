@@ -2006,17 +2006,29 @@ export function V4Timeline({
 						    which maps "ctrl" to ⌘ because there it means the primary modifier.
 						    Only the engraving changes: a Mac keyboard says ⇧ and ⌃.
 						    The scroll half of the gesture is a glyph rather than the word
-						    "Scroll", which was hardcoded English in all 13 locales. */}
+						    "Scroll", which was hardcoded English in all 13 locales.
+						    A glyph says nothing to a screen reader, though, which heard
+						    "Shift Pan". So the painted hint is hidden from it and a
+						    visually hidden sentence names the key, the wheel and the
+						    action instead, with the key spelled out rather than engraved. */}
 						<div className={styles.tlHints}>
 							<span className={styles.tlHint}>
-								<kbd className={styles.tlKbd}>{isMac ? "⇧" : "Shift"}</kbd>
+								<kbd className={styles.tlKbd} aria-hidden>
+									{isMac ? "⇧" : "Shift"}
+								</kbd>
 								<Mouse size={12} aria-hidden />
-								{t("labels.pan")}
+								<span aria-hidden>{t("labels.pan")}</span>
+								<span className="sr-only">{t("labels.panHint", { modifier: "Shift" })}</span>
 							</span>
 							<span className={styles.tlHint}>
-								<kbd className={styles.tlKbd}>{isMac ? "⌃" : "Ctrl"}</kbd>
+								<kbd className={styles.tlKbd} aria-hidden>
+									{isMac ? "⌃" : "Ctrl"}
+								</kbd>
 								<Mouse size={12} aria-hidden />
-								{t("labels.zoom")}
+								<span aria-hidden>{t("labels.zoom")}</span>
+								<span className="sr-only">
+									{t("labels.zoomHint", { modifier: isMac ? "Control" : "Ctrl" })}
+								</span>
 							</span>
 						</div>
 					</>
