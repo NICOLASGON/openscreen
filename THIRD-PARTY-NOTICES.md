@@ -158,7 +158,7 @@ distributed by their own registries, not redistributed inside our binaries.
 - **`sleepy-clouds`** — “Sleepy Clouds” by fupi, `sleepy-clouds.ogg`.
   Source: <https://opengameart.org/content/sleepy-clouds>.
   Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20251025095136/https://opengameart.org/content/sleepy-clouds>.
-- **`chill-loop`** — “Chill (Loopable)” by pro-sensory, `chill-loop.mp3`.
+- **`chill-loop`** — “Chill (Loopable)” by Alex McCulloch (pro-sensory), `chill-loop.mp3`.
   Source: <https://opengameart.org/content/chill-loopable>.
   Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20260606041706/https://opengameart.org/content/chill-loopable>.
 - **`soft-piano`** — “Softpiano20” by tozan, `soft-piano.ogg`.
@@ -167,7 +167,7 @@ distributed by their own registries, not redistributed inside our binaries.
 - **`slow-stride`** — “Slow Stride” by isaiah658, `slow-stride.ogg`.
   Source: <https://opengameart.org/content/slow-stride>.
   Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20260529105344/https://opengameart.org/content/slow-stride>.
-- **`meadow-thoughts`** — “Meadow Thoughts” by mishonis, `meadow-thoughts.ogg`.
+- **`meadow-thoughts`** — “Meadow Thoughts” by Écrivain, `meadow-thoughts.ogg`.
   Source: <https://opengameart.org/content/meadow-thoughts>.
   Licence statement as captured on 2026-09-15: <https://web.archive.org/web/20260915114237/https://opengameart.org/content/meadow-thoughts>.
 - **`napping-on-a-cloud`** — “Napping on a Cloud” by congusbongus, `napping-on-a-cloud.ogg`.
