@@ -38,7 +38,10 @@ const ALLOWED_LICENCES = new Map([
 	["CC0-1.0", "https://creativecommons.org/publicdomain/zero/1.0/"],
 ]);
 const AUDIO_EXTENSIONS = new Set([".opus", ".ogg", ".mp3", ".m4a", ".flac", ".wav"]);
-const ARCHIVE_HOSTS = ["web.archive.org", "archive.ph", "archive.today"];
+// Matched EXACTLY. A suffix match let any host ending in these names through
+// (`notweb.archive.org`, `fakearchive.ph`), and a snapshot anyone can register a domain
+// for is no evidence at all. No catalogue entry needs a subdomain.
+const ARCHIVE_HOSTS = new Set(["web.archive.org", "archive.ph", "archive.today"]);
 const REQUIRED_FIELDS = [
 	"id",
 	"title",
@@ -133,10 +136,10 @@ for (const [index, track] of tracks.entries()) {
 	if (!isHttpsUrl(track.sourceUrl)) fail(`${where}: sourceUrl must be an https URL.`);
 	if (!isHttpsUrl(track.licenseSnapshotUrl)) {
 		fail(`${where}: licenseSnapshotUrl must be an https URL.`);
-	} else if (
-		!ARCHIVE_HOSTS.some((host) => new URL(track.licenseSnapshotUrl).hostname.endsWith(host))
-	) {
-		fail(`${where}: licenseSnapshotUrl must point at a web archive (${ARCHIVE_HOSTS.join(", ")}).`);
+	} else if (!ARCHIVE_HOSTS.has(new URL(track.licenseSnapshotUrl).hostname)) {
+		fail(
+			`${where}: licenseSnapshotUrl must point at a web archive (${[...ARCHIVE_HOSTS].join(", ")}).`,
+		);
 	}
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(track.capturedAt ?? "")) {
 		fail(`${where}: capturedAt must be an ISO date (YYYY-MM-DD).`);

@@ -111,6 +111,27 @@ describe("check-music-licences", () => {
 		expect(code).toBe(1);
 	});
 
+	// A suffix match accepted any host that merely ENDS in an archive's name, and a
+	// lookalike domain is something anyone can register.
+	it.each([
+		"https://notweb.archive.org/web/2026/https://example.org/fixture",
+		"https://fakearchive.ph/abcde",
+	])("rejects a lookalike archive host: %s", (licenseSnapshotUrl) => {
+		const { code, out } = run(fixture({ tracks: [track({ licenseSnapshotUrl })] }));
+		expect(out).toContain("must point at a web archive");
+		expect(code).toBe(1);
+	});
+
+	it.each([
+		"https://web.archive.org/web/2026/https://example.org/fixture",
+		"https://archive.ph/abcde",
+		"https://archive.today/abcde",
+	])("accepts an archive it names: %s", (licenseSnapshotUrl) => {
+		const { code, out } = run(fixture({ tracks: [track({ licenseSnapshotUrl })] }));
+		expect(out).toContain("PASSED");
+		expect(code).toBe(0);
+	});
+
 	it("rejects a missing required field", () => {
 		const { code, out } = run(fixture({ tracks: [track({ sourceUrl: "" })] }));
 		expect(out).toContain('missing required field "sourceUrl"');
