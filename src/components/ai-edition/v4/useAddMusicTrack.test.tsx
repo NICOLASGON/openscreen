@@ -94,6 +94,104 @@ describe("useAddMusicTrack", () => {
 		expect(toastError).toHaveBeenCalledWith("audio.musicAddFailed");
 	});
 
+	describe("when the track cannot be had", () => {
+		it("reports a refused resolve with the main process's reason, and adds nothing", async () => {
+			resolveMusicTrack.mockResolvedValue({ success: false, message: "Unknown catalogue track" });
+			await hook()(TRACK);
+			expect(toastError).toHaveBeenCalledWith("audio.musicAddFailed", {
+				description: "Unknown catalogue track",
+			});
+			expect(store.addAudioAsset).not.toHaveBeenCalled();
+			expect(addAudioTrack).not.toHaveBeenCalled();
+		});
+
+		it("reports a rejected IPC call instead of letting it escape", async () => {
+			resolveMusicTrack.mockRejectedValue(new Error("channel closed"));
+			await expect(hook()(TRACK)).resolves.toBeUndefined();
+			expect(toastError).toHaveBeenCalledWith("audio.musicAddFailed", {
+				description: "channel closed",
+			});
+			expect(addAudioTrack).not.toHaveBeenCalled();
+		});
+
+		it("reports a failed import, and places nothing", async () => {
+			store.addAudioAsset.mockResolvedValue(null);
+			await hook()(TRACK);
+			expect(toastError).toHaveBeenCalledWith("audio.musicAddFailed");
+			expect(addAudioTrack).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("placement", () => {
+		// 300 s programme, 76.3 s bed.
+		it("lays the bed at the playhead", async () => {
+			store.currentTimeSec = 42;
+			await hook()(TRACK);
+			expect(addAudioTrack).toHaveBeenCalledWith("asset_new", 42, expect.anything());
+		});
+
+		// Never more of the ruler than the file has: looping, not the span, fills the rest.
+		it("spans the file's own length when more of the programme is left than that", async () => {
+			store.currentTimeSec = 10;
+			await hook()(TRACK);
+			expect(addAudioTrack.mock.calls[0][2]).toMatchObject({ durationSec: 76.3, spanSec: 76.3 });
+		});
+
+		it("spans only what is left of the programme when that is shorter", async () => {
+			store.currentTimeSec = 280;
+			await hook()(TRACK);
+			expect(addAudioTrack.mock.calls[0][2]).toMatchObject({ durationSec: 76.3, spanSec: 20 });
+		});
+
+		// Past the end there is nothing to cover; the bed still gets a real span to grab.
+		it("falls back to the file's length at or past the end of the programme", async () => {
+			store.currentTimeSec = 300;
+			await hook()(TRACK);
+			expect(addAudioTrack.mock.calls[0][2]).toMatchObject({ spanSec: 76.3 });
+		});
+	});
+
+	describe("defaults", () => {
+		// The defaults ARE the feature: a bed at unity gain with no fades buries the voice.
+		it("sits the bed at -18 dB with 500 ms fades on each edge", async () => {
+			await hook()(TRACK);
+			expect(addAudioTrack.mock.calls[0][2].initial).toMatchObject({
+				gainDb: -18,
+				fadeInMs: 500,
+				fadeOutMs: 500,
+			});
+		});
+
+		it("loops a bed that is shorter than what is left of the programme", async () => {
+			store.currentTimeSec = 0; // 300 s left for a 76.3 s bed
+			await hook()(TRACK);
+			expect(addAudioTrack.mock.calls[0][2].initial.loop).toBe(true);
+		});
+
+		it("does not loop a bed that already reaches the end", async () => {
+			store.currentTimeSec = 250; // 50 s left
+			await hook()(TRACK);
+			expect(addAudioTrack.mock.calls[0][2].initial.loop).toBe(false);
+		});
+
+		// A track a frame or two short of the end is covering it, not falling short.
+		it("loops only when the bed falls more than 0.05 s short", async () => {
+			const remaining = (sec: number) => {
+				store.currentTimeSec = 300 - sec;
+			};
+			const loopFor = async (leftSec: number) => {
+				addAudioTrack.mockClear();
+				remaining(leftSec);
+				await hook()(TRACK);
+				return addAudioTrack.mock.calls[0][2].initial.loop;
+			};
+			// Either side of the threshold by a margin float rounding cannot cross.
+			expect(await loopFor(76.3 + 0.07)).toBe(true);
+			expect(await loopFor(76.3 + 0.03)).toBe(false);
+			expect(await loopFor(76.3)).toBe(false);
+		});
+	});
+
 	it("imports the track when the project does not hold it yet", async () => {
 		await hook()(TRACK);
 		expect(store.addAudioAsset).toHaveBeenCalledWith(BED_PATH, "Sleepy Clouds");
