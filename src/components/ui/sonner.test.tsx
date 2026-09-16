@@ -95,6 +95,13 @@ describe("close button colours", () => {
 		expect(closeRule(":hover")).toMatch(/^\s*color:/m);
 	});
 
+	// Sonner's dark `:hover` rule outranks the base override and restores its border, so the
+	// "no border" decision has to be repeated on hover or a ring appears under the pointer.
+	it("keeps the border off on hover as well as at rest", () => {
+		expect(closeRule("")).toMatch(/border-color:\s*transparent/);
+		expect(closeRule(":hover")).toMatch(/border-color:\s*transparent/);
+	});
+
 	it("does not pass them through classNames, where they lose", () => {
 		const toaster = readFileSync(path.join(root, "src/components/ui/sonner.tsx"), "utf8");
 		expect(toaster).not.toMatch(/closeButton:\s*"/);
