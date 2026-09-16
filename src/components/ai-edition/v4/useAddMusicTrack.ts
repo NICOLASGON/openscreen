@@ -50,28 +50,25 @@ export function useAddMusicTrack(tl: TimelineApi): (track: MusicTrack) => Promis
 				// the file actually has — looping is what fills the rest, below.
 				const spanSec =
 					remainingSec > 0 ? Math.min(track.durationSec, remainingSec) : track.durationSec;
+				// A bed sits UNDER the narration: quiet, eased in and out, and looped only when it
+				// is genuinely too short for what it has to cover (looping a bed that already
+				// reaches the end would change nothing). All of it lands in the SAME write as the
+				// placement: one undo step, and no half-configured bed at unity gain left behind
+				// if a later save failed.
 				const trackId = await tl.addAudioTrack(asset.id, playhead, {
 					kind: "music",
 					durationSec: track.durationSec,
 					spanSec,
+					initial: {
+						gainDb: MUSIC_BED_DEFAULTS.gainDb,
+						fadeInMs: MUSIC_BED_DEFAULTS.fadeInMs,
+						fadeOutMs: MUSIC_BED_DEFAULTS.fadeOutMs,
+						loop: track.durationSec < remainingSec - MUSIC_BED_DEFAULTS.loopSlackSec,
+					},
 				});
-				if (!trackId) {
-					toast.error(t("audio.musicAddFailed"));
-					return;
-				}
-				// A bed sits UNDER the narration: quiet, eased in and out. One undo away, and
-				// every value is in the inspector.
-				await tl.updateAudioTrack(trackId, {
-					gainDb: MUSIC_BED_DEFAULTS.gainDb,
-					fadeInMs: MUSIC_BED_DEFAULTS.fadeInMs,
-					fadeOutMs: MUSIC_BED_DEFAULTS.fadeOutMs,
-				});
-				// Only when the track is genuinely too short for what it has to cover — looping
-				// a bed that already reaches the end would change nothing and still cost an
-				// undo step.
-				if (track.durationSec < remainingSec - 0.05) {
-					await tl.setAudioTrackLoop(trackId, true);
-				}
+				// Null covers a failed save too; `saveDocument` has already said why, but not
+				// that the track the user picked is not on the timeline.
+				if (!trackId) toast.error(t("audio.musicAddFailed"));
 			} catch (err) {
 				toast.error(t("audio.musicAddFailed"), {
 					description: err instanceof Error ? err.message : String(err),

@@ -46,11 +46,7 @@ const resolveMusicTrack = vi.fn();
 const addAudioTrack = vi.fn();
 
 function hook() {
-	const tl = {
-		addAudioTrack,
-		updateAudioTrack: vi.fn(async () => undefined),
-		setAudioTrackLoop: vi.fn(async () => undefined),
-	} as unknown as ReturnType<typeof useTimeline>;
+	const tl = { addAudioTrack } as unknown as ReturnType<typeof useTimeline>;
 	return renderHook(() => useAddMusicTrack(tl)).result.current;
 }
 
@@ -78,6 +74,24 @@ describe("useAddMusicTrack", () => {
 		expect(store.addAudioAsset).not.toHaveBeenCalled();
 		expect(addAudioTrack).toHaveBeenCalledWith("asset_existing", 0, expect.anything());
 		expect(toastError).not.toHaveBeenCalled();
+	});
+
+	// The placement and every default are one write, so one undo step, and a failed save
+	// cannot leave a half-configured bed at unity gain behind.
+	it("places the bed with its defaults in a single timeline call", async () => {
+		await hook()(TRACK);
+		expect(addAudioTrack).toHaveBeenCalledTimes(1);
+		expect(addAudioTrack.mock.calls[0][2]).toMatchObject({
+			kind: "music",
+			initial: { gainDb: -18, fadeInMs: 500, fadeOutMs: 500 },
+		});
+	});
+
+	// Null covers a failed save; the user still has to learn the pick did not land.
+	it("says so when the track could not be placed", async () => {
+		addAudioTrack.mockResolvedValue(null);
+		await hook()(TRACK);
+		expect(toastError).toHaveBeenCalledWith("audio.musicAddFailed");
 	});
 
 	it("imports the track when the project does not hold it yet", async () => {

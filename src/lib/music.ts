@@ -42,6 +42,9 @@ export const MUSIC_BED_DEFAULTS = {
 	gainDb: -18,
 	fadeInMs: 500,
 	fadeOutMs: 500,
+	/** How much shorter than the rest of the programme a bed must be before it loops. A
+	 *  track that ends a frame or two early is covering it, not falling short. */
+	loopSlackSec: 0.05,
 } as const;
 
 /** The file:// (packaged) or /music/… (dev) URL that plays a catalogue track in an
